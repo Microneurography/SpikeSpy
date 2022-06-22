@@ -450,6 +450,23 @@ class MdiView(QMainWindow):
         file_menu.addAction(
             QAction("Save as nixio", self, shortcut="Ctrl+S", triggered=self.save_as)
         )
+        file_menu.addAction(
+            QAction("Export as csv", self, shortcut= "Ctrl+E", triggered=self.export_csv )
+        )
+    def export_csv(self):
+        save_filename = QFileDialog.getSaveFileName(self, "Export")[0]
+        from csv import writer
+        with open(save_filename, 'w') as f:
+            w = writer(f)
+            w.writerow(['SpikeID','Stimulus_number','Latency (ms)','Timestamp(ms)']) 
+            for i, sg in enumerate(self.state.spike_groups):
+                for timestamp in sg.event:
+                    stim_no = self.state.event_signal.searchsorted(timestamp)-1
+                    latency = (timestamp - self.state.event_signal[stim_no]).rescale(pq.ms)
+                    w.writerow([f'{i}', stim_no, latency.base, timestamp.rescale(pq.ms).base ])
+
+        
+
 
     def newWindow(self, k):
         w = self.window_options[k](parent=self, state=self.state)
