@@ -140,7 +140,7 @@ class MultiTraceView(QMainWindow):
             return
         for ax in self.ax_right[1:]:
             ax.remove()
-
+        self.ax_right[0].clear()
         self.percentiles = np.percentile(
             np.abs(self.state.analog_signal_erp), np.arange(100)
         )
@@ -242,6 +242,7 @@ class MultiTraceView(QMainWindow):
             [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
         )
         if len(points) == 0:
+            self.view.draw()
             return
         self.points_spikegroup = self.ax.scatter(
             points[:, 0], points[:, 1], color="red", s=4
@@ -266,8 +267,7 @@ class MultiTraceView(QMainWindow):
                 self.percentiles[self.lowerSpinBox.value()],
                 self.percentiles[self.upperSpinBox.value()],
             )
-            self.view.draw()
-        pass
+        self.view.draw()
 
     def view_clicked(self, e: MouseEvent):
         if self.toolbar.mode != "" or e.button != 1:

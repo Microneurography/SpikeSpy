@@ -55,9 +55,12 @@ class UnitView(QMainWindow):
 
         self.fig = Figure(figsize=(xsize / dpi, ysize / dpi), dpi=dpi)
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
-
+ 
         #  create widgets
+
         self.view = FigureCanvas(self.fig)
+        self.toolbar = NavigationToolbar2QT(self.view, self)
+        self.addToolBar(self.toolbar)
         self.setCentralWidget(self.view)
         self.axes = None
         self.w = None
@@ -182,6 +185,7 @@ class SpikeGroupTableView(QWidget):
         self.state = state
         state.onUnitChange.connect(self.spike_tablemodel.update)
         state.onUnitGroupChange.connect(self.spike_tablemodel.update)
+        state.onLoadNewFile.connect(self.spike_tablemodel.update)
         self.tbl.setSelectionBehavior(QAbstractItemView.SelectRows)
 
         self.addButton = QPushButton("+")
@@ -224,13 +228,13 @@ class SingleTraceView(QMainWindow):
 
         self.toolbar = NavigationToolbar2QT(self.view, self)
         self.ax = self.fig.add_subplot(111)
+        self.addToolBar(self.toolbar)
 
         self.identified_spike_line = self.ax.axvline(6000, zorder=0)
         self.trace_line_cache = None
 
         self.setupFigure()
         self.setCentralWidget(self.view)
-        self.addToolBar(self.toolbar)
 
         self.state.onLoadNewFile.connect(self.setupFigure)
         self.state.onUnitChange.connect(self.updateFigure)
@@ -556,6 +560,9 @@ def save_file(
         for x in [*data2.analogsignals, *data2.events, data2]:
             if "nix_name" in x.annotations:
                 del x.annotations["nix_name"]
+        
+        data2.analogsignals = [x.rescale("mV") for x in data2.analogsignals]
+        
 
         # remove previous unit annotations
         data2.events = [x for x in data2.events if not x.name.startswith("unit_")]
@@ -585,7 +592,7 @@ class SpikeGroupTableModel(QAbstractTableModel):
         self.headers = ["SpikeID", "start", "end", "notes", "fibre class"]
 
     def rowCount(self, parent=QModelIndex()):
-        return len(self.spikegroups_func())
+        return len(self.spikegroups_func() or [])
 
     def columnCount(self, parent=QModelIndex()):
         return len(self.headers)

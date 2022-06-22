@@ -9,7 +9,7 @@ import quantities as pq
 from matplotlib.path import Path
 from matplotlib.widgets import PolygonSelector
 from PySide6.QtWidgets import (QApplication, QFormLayout, QHBoxLayout,
-                               QMainWindow, QPushButton, QSpinBox, QStyle,
+                               QMainWindow, QPushButton, QSpinBox, QStyle, QDoubleSpinBox,
                                QWidget)
 
 from .basic_tracking import track_basic
@@ -40,7 +40,7 @@ class TrackingView(QMainWindow):
 
         layout.addRow(self.tr("window size (ms)"), qsb_window_size)
 
-        qsb_threshold = QSpinBox(self)
+        qsb_threshold = QDoubleSpinBox(self)
         qsb_threshold.setMinimumWidth(100)
         qsb_threshold.setMaximum(1000000)
         qsb_threshold.setMinimum(-1000000)
@@ -57,6 +57,13 @@ class TrackingView(QMainWindow):
         ql.addWidget(qbut_threshold_update)
 
         layout.addRow(self.tr("Threshold (mV)"),ql)
+
+        qsb_max_skip = QSpinBox(self)
+        qsb_max_skip.setMaximum(10)
+        qsb_max_skip.setMinimum(0)
+        qsb_max_skip.setValue(1)
+        self.qsb_max_skip = qsb_max_skip
+        layout.addRow(self.tr("Maximum skips"), qsb_max_skip)
         
         #qbut_threshold_update.setFixedHeight(20)
         #layout.addRow(qbut_threshold_update)
@@ -90,12 +97,6 @@ class TrackingView(QMainWindow):
 
         starting_time = unit_events[max(last_event - 1, 0)]
         window = self.qsb_window_size.value() * pq.ms
-        # threshold = (
-        #     self.state.analog_signal[
-        #         self.state.analog_signal.time_index(starting_time)
-        #     ][0]
-        #     * 0.8
-        # )  # 0.1 * pq.mV
         threshold = self.qsb_threshold.value() * pq.mV
 
         evt2 = track_basic(
@@ -104,6 +105,7 @@ class TrackingView(QMainWindow):
             starting_time=starting_time,
             window=window,
             threshold=threshold,
+            max_skip=self.qsb_max_skip.value()
         )
 
         self.state.updateUnit(
