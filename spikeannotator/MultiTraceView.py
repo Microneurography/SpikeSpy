@@ -8,7 +8,7 @@ import PySide6
 import quantities as pq
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backend_tools import ToolToggleBase
-from matplotlib.backends.backend_qt5agg import (FigureCanvas,
+from matplotlib.backends.backend_qtagg import (FigureCanvas,
                                                 NavigationToolbar2QT)
 from matplotlib.figure import Figure
 from matplotlib.path import Path
@@ -16,7 +16,7 @@ from matplotlib.widgets import PolygonSelector
 from neo import Event
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (QApplication, QCheckBox, QHBoxLayout,
-                               QMainWindow, QSpinBox, QVBoxLayout, QWidget)
+                               QMainWindow, QSpinBox, QVBoxLayout, QWidget, QGroupBox, QRadioButton, QButtonGroup)
 
 from .APTrack_experiment_import import process_folder as open_aptrack
 from .NeoSettingsView import NeoSettingsView
@@ -84,16 +84,38 @@ class MultiTraceView(QMainWindow):
 
         self.lock_to_stimCheckBox.stateChanged.connect(set_lock)
 
-        self.layoutTypeCheckbox = QCheckBox("lines")
-        self.layoutTypeCheckbox.stateChanged.connect(
-            lambda: self.setup_figure(self.layoutTypeCheckbox.isChecked())
-        )
+        butgrp = QButtonGroup()
 
+        linesRadio = QRadioButton("lines")
+        heatmapRadio = QRadioButton("heatmap")
+        unitOnlyRadio = QRadioButton("unit only")
+
+        heatmapRadio.setChecked(True)
+        butgrp.addButton(linesRadio)
+        butgrp.addButton(heatmapRadio)
+        butgrp.addButton(unitOnlyRadio)
+
+        def buttonToggled(id,checked):
+            if heatmapRadio.isChecked():
+                mode = "heatmap"
+            elif linesRadio.isChecked():
+                mode = "lines"
+            elif unitOnlyRadio.isChecked():
+                mode = "unitonly"
+            if checked:
+
+                self.setup_figure(mode)
+        butgrp.idToggled.connect(buttonToggled)
+        
+       
         layout2 = QHBoxLayout()
         layout2.addWidget(self.lowerSpinBox)
         layout2.addWidget(self.upperSpinBox)
-        layout2.addWidget(self.layoutTypeCheckbox)
+        #layout2.addWidget(self.layoutTypeCheckbox)
         layout2.addWidget(self.lock_to_stimCheckBox)
+        layout2.addWidget(linesRadio)
+        layout2.addWidget(heatmapRadio)
+        layout2.addWidget(unitOnlyRadio)
 
         layout.addLayout(layout2)
         layout.addWidget(self.view)
@@ -133,7 +155,7 @@ class MultiTraceView(QMainWindow):
         stimFreq_data = (1/np.diff(self.state.event_signal.times).rescale(pq.second),np.arange(1, len(self.state.event_signal.times)),)
         self.right_ax_data = {'Stimulation Frequency':stimFreq_data}
 
-    def setup_figure(self, lines=False):
+    def setup_figure(self, mode="heatmap"):
         if self.state is None:
             return
         if self.state.analog_signal is None:
@@ -151,7 +173,7 @@ class MultiTraceView(QMainWindow):
             self.ax_track_cmap.remove()
             self.ax_track_cmap = None
         
-        if not lines:
+        if mode=="heatmap":
 
             self.ax_track_cmap = self.ax.imshow(
                 np.abs(self.state.analog_signal_erp),
@@ -160,7 +182,7 @@ class MultiTraceView(QMainWindow):
                 clim=(self.percentiles[40], self.percentiles[95]),
                 interpolation="nearest",
             )
-        else:
+        elif(mode=="lines"):
 
             p90 = self.percentiles[95] * 4
             analog_signal_erp_norm = np.clip(
@@ -174,7 +196,8 @@ class MultiTraceView(QMainWindow):
                 color="gray",
                 zorder=10,
             )
-        self.view.draw()
+        else:
+            pass
         if self.points_spikegroup is not None:
             self.points_spikegroup.remove()
             self.points_spikegroup = None
@@ -196,7 +219,8 @@ class MultiTraceView(QMainWindow):
             self.ax_right[-1].tick_params(axis='y', colors=c)
         
         self.fig.tight_layout()
-        
+       
+        self.view.draw() 
             
 
 
@@ -280,7 +304,7 @@ if __name__ == "__main__":
 
     app = QApplication([])
     state = ViewerState()
-    state.loadFile(r"data/2019-09-24_15-01-29.h5")
+    state.loadFile(r"data/test2.h5")
 
     view = MultiTraceView(state=state)
     view.show()
