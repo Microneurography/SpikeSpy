@@ -32,16 +32,18 @@ class TrackingView(QMainWindow):
         self.setCentralWidget(w)
 
 
-        qsb_window_size = QSpinBox(self)
+        qsb_window_size = QDoubleSpinBox(self)
         qsb_window_size.setMinimumWidth(100)
         qsb_window_size.setMaximum(100)
-        qsb_window_size.setMinimum(10)
+        qsb_window_size.setDecimals(3)
+        qsb_window_size.setMinimum(0.001)
         self.qsb_window_size = qsb_window_size
 
         layout.addRow(self.tr("window size (ms)"), qsb_window_size)
 
         qsb_threshold = QDoubleSpinBox(self)
         qsb_threshold.setMinimumWidth(100)
+        qsb_window_size.setDecimals(3)
         qsb_threshold.setMaximum(1000000)
         qsb_threshold.setMinimum(-1000000)
 
@@ -87,7 +89,7 @@ class TrackingView(QMainWindow):
             ][0]
             * 0.8
         ).rescale("mV")
-        self.qsb_threshold.setValue(int(threshold))
+        self.qsb_threshold.setValue(threshold)
 
     def trackUnit(self):
         unit_events = self.state.getUnitGroup().event
@@ -108,6 +110,7 @@ class TrackingView(QMainWindow):
             max_skip=self.qsb_max_skip.value()
         )
 
+        # currently this can create >1 unit per stimulation - which goes against our philosophy
         self.state.updateUnit(
             event=unit_events.merge(evt2)
         )  # Perhaps create new units to merge later?
