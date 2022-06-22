@@ -84,6 +84,9 @@ class MultiTraceView(QMainWindow):
 
         self.lock_to_stimCheckBox.stateChanged.connect(set_lock)
 
+        self.includeAllUnitsCheckBox = QCheckBox("All units")
+        self.includeAllUnitsCheckBox.stateChanged.connect(lambda x:self.plot_spikegroups())
+
         butgrp = QButtonGroup()
 
         linesRadio = QRadioButton("lines")
@@ -94,7 +97,7 @@ class MultiTraceView(QMainWindow):
         butgrp.addButton(linesRadio)
         butgrp.addButton(heatmapRadio)
         butgrp.addButton(unitOnlyRadio)
-
+        self.mode = "heatmap"
         def buttonToggled(id,checked):
             if heatmapRadio.isChecked():
                 mode = "heatmap"
@@ -103,15 +106,16 @@ class MultiTraceView(QMainWindow):
             elif unitOnlyRadio.isChecked():
                 mode = "unitonly"
             if checked:
+                self.mode = mode                
+                self.setup_figure()
 
-                self.setup_figure(mode)
         butgrp.idToggled.connect(buttonToggled)
         
        
         layout2 = QHBoxLayout()
         layout2.addWidget(self.lowerSpinBox)
         layout2.addWidget(self.upperSpinBox)
-        #layout2.addWidget(self.layoutTypeCheckbox)
+        layout2.addWidget(self.includeAllUnitsCheckBox)
         layout2.addWidget(self.lock_to_stimCheckBox)
         layout2.addWidget(linesRadio)
         layout2.addWidget(heatmapRadio)
@@ -130,8 +134,6 @@ class MultiTraceView(QMainWindow):
         self.points_spikegroup = None
         self.hline = None
         
-        
-
         self.setup_figure()
         self.update_axis()
 
@@ -155,7 +157,8 @@ class MultiTraceView(QMainWindow):
         stimFreq_data = (1/np.diff(self.state.event_signal.times).rescale(pq.second),np.arange(1, len(self.state.event_signal.times)),)
         self.right_ax_data = {'Stimulation Frequency':stimFreq_data}
 
-    def setup_figure(self, mode="heatmap"):
+    def setup_figure(self):
+        mode = self.mode
         if self.state is None:
             return
         if self.state.analog_signal is None:
@@ -219,6 +222,7 @@ class MultiTraceView(QMainWindow):
             self.ax_right[-1].tick_params(axis='y', colors=c)
         
         self.fig.tight_layout()
+
        
         self.view.draw() 
             
@@ -254,23 +258,34 @@ class MultiTraceView(QMainWindow):
             minor=True,
         )
         # self.ax.grid(True, which="both")
-
+    points_spikegroups = None
     def plot_spikegroups(self, sgidx=None):
-        sg = self.state.getUnitGroup(sgidx)
-        if self.points_spikegroup is None:
-            pass  # TODO optimisation of setting x_data rather than replotting
+        if self.points_spikegroups is None:
+                pass  # TODO optimisation of setting x_data rather than replotting
         else:
-            self.points_spikegroup.remove()
-            self.points_spikegroup = None
-        points = np.array(
-            [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
-        )
-        if len(points) == 0:
-            self.view.draw()
-            return
-        self.points_spikegroup = self.ax.scatter(
-            points[:, 0], points[:, 1], color="red", s=4
-        )
+            for x in self.points_spikegroups:
+                x.remove()
+        self.points_spikegroups = []
+        def plot(sgidx, **kwargs):
+            sg = self.state.getUnitGroup(sgidx)
+            
+            points = np.array(
+                [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
+            )
+            if len(points) == 0:
+                self.view.draw()
+                return
+            return self.ax.scatter(
+                points[:, 0], points[:, 1], s=4, **kwargs
+            )
+        # include other units
+        if (self.includeAllUnitsCheckBox.isChecked()):
+            for i,x in enumerate(self.state.spike_groups):
+                if i == self.state.cur_spike_group:
+                    continue
+                self.points_spikegroups.append(plot(i))
+
+        self.points_spikegroups.append(plot(self.state.cur_spike_group, color="red"))
         self.view.draw()
 
     def plot_curstim_line(self, stimNo=None):
