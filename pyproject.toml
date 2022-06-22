@@ -3,7 +3,7 @@ packages = [
     { include = "spikeannotator" }
 ]
 name="spikeannotator"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["Aidan Nickerson"]
 
@@ -28,6 +28,7 @@ matplotlib = "^3.5.2"
 black = {version = "^21.7b0", allow-prereleases = true}
 pyinstaller = "^4.10"
 pyinstaller-hooks-contrib = "^2022.3"
+ipython = "^8.4.0"
 
 [tool.poetry.scripts]
 spikeverify = "spikeannotator.mng_visualisation:run"
