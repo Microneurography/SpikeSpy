@@ -176,7 +176,7 @@ class ViewerState(QObject):
 
         s = int(np.array(self.analog_signal.sampling_rate.base) // 2)  # 500ms
         self.analog_signal_erp = create_erp(
-            self.analog_signal.as_array()[:, 0],
+            self.analog_signal.rescale("mV").as_array()[:, 0],
             (self.event_signal.as_array() - self.analog_signal.t_start.base)
             * np.array(self.analog_signal.sampling_rate, dtype=int),
             0,

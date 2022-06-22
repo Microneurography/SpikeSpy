@@ -126,7 +126,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None):
                         "duration": (
                             np.array(idxs[1] - idxs[0] - 1) / sampling_rate
                         ).rescale("s"),
-                        "maximum": idxs[2] * ch_units_probe,
+                        "maximum": (idxs[2] * ch_units_probe).rescale("mV"),
                     },
                     description= f.details
                 )

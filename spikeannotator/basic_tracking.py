@@ -14,8 +14,6 @@ def track_basic(raw_data:neo.AnalogSignal, stimulus_events:neo.Event, starting_t
     given an identified time & threshold, look at track below within a given window for a threshold crossing, repeat until end
     """
 
-    width_in_samples = (window * raw_data.sampling_rate).base
-    timestamps = ((stimulus_events.as_quantity() - raw_data.t_start) * raw_data.sampling_rate).base
     start_idx = stimulus_events.as_array().searchsorted(starting_time)
     
     offset = starting_time - stimulus_events[start_idx-1]

@@ -269,12 +269,12 @@ class SingleTraceView(QMainWindow):
         self.ax.xaxis.set_major_formatter(func_formatter)
         self.ax.set_xticks(
             np.arange(
-                0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 10
+                0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 100
             )
         )
         self.ax.set_xticks(
             np.arange(
-                0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 100
+                0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 1000
             ),
             minor=True,
         )

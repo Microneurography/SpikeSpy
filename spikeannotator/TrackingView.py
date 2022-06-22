@@ -4,16 +4,18 @@ from re import I
 from typing import Any, List, Optional, Union
 
 import matplotlib.style as mplstyle
+import numpy as np
 import PySide6
 import quantities as pq
 from matplotlib.path import Path
 from matplotlib.widgets import PolygonSelector
-from PySide6.QtWidgets import (QApplication, QFormLayout, QHBoxLayout,
-                               QMainWindow, QPushButton, QSpinBox, QStyle, QDoubleSpinBox,
-                               QWidget)
+from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QFormLayout,
+                               QHBoxLayout, QMainWindow, QPushButton, QSpinBox,
+                               QStyle, QWidget)
 
 from .basic_tracking import track_basic
 from .ViewerState import ViewerState
+from neo import Event
 
 mplstyle.use("fast")
 
@@ -110,9 +112,31 @@ class TrackingView(QMainWindow):
             max_skip=self.qsb_max_skip.value()
         )
 
+        overwrite = True # TODO: different modes: overwrite, new
+        
+        newEvents = []
+        if overwrite:
+            # The search sorted returns the len(evt2) +1 if out of bounds => breaking => this weird code
+            nxt_evt2 = evt2.searchsorted(self.state.event_signal) 
+            nxt_old = unit_events.searchsorted(self.state.event_signal)
+            for i,(e,new,old) in enumerate(zip(self.state.event_signal,nxt_evt2,nxt_old)):
+                time_gap = 1 * pq.s
+                if i < len(self.state.event_signal)-1:
+                    t = self.state.event_signal[i+1] - e
+                    time_gap = min(time_gap, t)
+                
+                
+                if (new < len(evt2) ) and (0*pq.s < (evt2[new] - e) < time_gap):
+                    newEvents.append(evt2[new])
+                    continue
+
+                if old < len(unit_events) and (0*pq.s < (unit_events[old] - e) < time_gap):
+                    newEvents.append(unit_events[old])
+                    continue
+            
         # currently this can create >1 unit per stimulation - which goes against our philosophy
         self.state.updateUnit(
-            event=unit_events.merge(evt2)
+            event=Event(np.array(newEvents) * pq.s)
         )  # Perhaps create new units to merge later?
 
 

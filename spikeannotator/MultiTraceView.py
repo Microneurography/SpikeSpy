@@ -45,7 +45,7 @@ class MultiTraceView(QMainWindow):
         self.fig = Figure(figsize=(xsize / dpi, ysize / dpi), dpi=dpi)
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
 
- 
+        self.mode = "heatmap"
 
 
         gs = self.fig.add_gridspec(1,2, width_ratios=[5,1])
@@ -97,7 +97,7 @@ class MultiTraceView(QMainWindow):
         butgrp.addButton(linesRadio)
         butgrp.addButton(heatmapRadio)
         butgrp.addButton(unitOnlyRadio)
-        self.mode = "heatmap"
+        
         def buttonToggled(id,checked):
             if heatmapRadio.isChecked():
                 mode = "heatmap"
@@ -299,7 +299,7 @@ class MultiTraceView(QMainWindow):
         self.view.draw()
 
     def updateAll(self):
-        if self.layoutTypeCheckbox.isChecked():
+        if self.mode!="heatmap":
             pass
         else:
             self.ax_track_cmap.set_clim(
