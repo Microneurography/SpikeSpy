@@ -6,7 +6,6 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from readline import parse_and_bind
 from typing import List
 
 import neo
