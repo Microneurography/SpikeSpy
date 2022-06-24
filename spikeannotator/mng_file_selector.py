@@ -8,7 +8,10 @@ from PySide6.QtCore import (QAbstractItemModel, QAbstractTableModel, QDir,
                             QModelIndex, Qt, Slot)
 from PySide6.QtGui import QAction, QColor, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (QApplication, QComboBox, QStyledItemDelegate,
-                               QTreeView, QVBoxLayout, QWidget)
+                               QTreeView, QVBoxLayout, QWidget, QHBoxLayout, QPushButton)
+import numpy as np
+
+from spikeannotator.APTrack_experiment_import import TypeID, find_square_pulse_numpy
 
 
 class ComboboxDelegate(QStyledItemDelegate):
@@ -47,11 +50,69 @@ class QNeoSelector(QWidget):
         # self.treeView.setEditTriggers(QAbstractItemView.AllEditTriggers)
         #self.treeView.clicked.connect(self.treeView.edit)
 
+        t = QWidget()
+        hboxlayout = QHBoxLayout(t)
+        hboxlayout.addWidget(self.treeView)
+
         self.verticalLayout = QVBoxLayout()
-        self.verticalLayout.addWidget(self.treeView)
+
         self.setLayout(self.verticalLayout)
-        delegate = ComboboxDelegate(options=['signal','events'])
-        self.treeView.setItemDelegateForColumn(1,delegate)
+        t2 = QWidget()
+        central_vlayout = QVBoxLayout(t2)
+        add_button = QPushButton("+")
+        self.output = neo.Segment()
+
+        def add_button_clicked(process=None):
+            sel = self.get_selection()[0]
+            if process == "TTL":
+                    d = sel.as_array()
+                    idxs = find_square_pulse_numpy(
+                            d,
+                            sel.sampling_rate * 0.0004,
+                            (2 * np.std(d)) + np.mean(d)
+                    )  
+                    idxs_rising = idxs[
+                        0
+                    ] 
+                    sel = neo.Event(
+                    (idxs_rising / sel.sampling_rate).rescale("s"),
+                    type_id=TypeID.TTL.value,
+                    name=sel.name,
+                    array_annotations={
+                        "duration": (
+                            np.array(idxs[1] - idxs[0] - 1) / sel.sampling_rate
+                        ).rescale("s"),
+                        "maximum": (idxs[2] * sel.units).rescale("mV"),
+                    },
+                    )   
+            if isinstance(sel, neo.AnalogSignal):
+                
+                self.output.analogsignals.append(sel)
+            elif isinstance(sel, neo.Event):
+                self.output.events.append(sel)
+            
+        add_button.clicked.connect(add_button_clicked)
+
+        add_ttl_button = QPushButton("->TTL")
+        add_ttl_button.clicked.connect(lambda: add_button_clicked("TTL"))
+
+        minus_button = QPushButton("-")
+        central_vlayout.addWidget(add_button)
+        central_vlayout.addWidget(add_ttl_button)
+        central_vlayout.addWidget(minus_button)
+        
+        hboxlayout.addWidget(t2)
+        
+        self.selectedTreeView = QTreeView(self)
+        self.selectedTreeModel = QStandardItemModel(self)
+        self.selectedTreeView.setModel(self.selectedTreeModel)
+        hboxlayout.addWidget(self.selectedTreeView)
+
+        
+        self.verticalLayout.addWidget(t)
+        but = QPushButton("done")
+        self.verticalLayout.addWidget(but)
+
         self.map = {}
         # __qtreewidgetitem = QTreeWidgetItem(self.treeWidget)
        
@@ -67,8 +128,10 @@ class QNeoSelector(QWidget):
         
         #c.setText(1, "surprise!")
     
-    def load_neo(self, data:neo.Block):
-        rt = self.model.invisibleRootItem()
+    def load_neo(self, data:neo.Block, model=None):
+        if model is None:
+            model = self.model
+        rt = model.invisibleRootItem()
         rt.setColumnCount(1)
         for i,s in enumerate(data.segments):
 
@@ -77,25 +140,28 @@ class QNeoSelector(QWidget):
             si.appendRow(si_analogs)
             for i, a in enumerate(s.analogsignals):
                 si2 = QStandardItem(f"{i}-{a.name}")
-                si_analogs.appendRow([si2,QStandardItem()])
                 
-                self.map[si2.index().row()] = a
+                uid = f"analog-{i}"
+                si2.setData(uid)
+                self.map[uid] = a
+                si_analogs.appendRow([si2])
             
             si_events = QStandardItem("events")
             for i, a in enumerate(s.events):
                 si2 = QStandardItem(f"{i}-{a.name}")
-                si_events.appendRow([si2,QStandardItem()]) 
-                self.map[si2.index().row()] = a
+                
+                uid = f"events-{i}"
+                si2.setData(uid)
+                self.map[uid] = a
+                si_events.appendRow([si2]) 
             si.appendRow(si_events)
 
             rt.appendRow(si)
     
     def get_selection(self):
-        rownos = [x.row() for x in self.treeView.selectedIndexes()]
-        return [self.map[r] for r in rownos]
+        rownos = [self.model.itemFromIndex(x).data() for x in self.treeView.selectedIndexes()]
+        return [self.map[r] for r in rownos if r is not None]
 
-class NeoTreeModel(QAbstractItemModel):
-    pass
 
     
 if __name__ == "__main__":
@@ -110,9 +176,9 @@ if __name__ == "__main__":
 
     # tree.setRootIndex(model.index(QDir.currentPath()))
     # tree.show()
+    data = neo.NixIO("data/test2.h5",mode="ro").read_block()
     view = QNeoSelector()
     view.load_neo(data)
     view.show()
     app.exec()
-    print(view.get_selection())
     sys.exit()
