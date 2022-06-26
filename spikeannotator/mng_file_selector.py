@@ -41,9 +41,9 @@ class ComboboxDelegate(QStyledItemDelegate):
         editor.setGeometry(option.rect)
 
 class QNeoSelector(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, state=None):
         super().__init__(parent)
-        
+        self.state = state
         self.treeView = QTreeView(self)
         self.model = QStandardItemModel(self)
         self.treeView.setModel(self.model)
@@ -60,8 +60,10 @@ class QNeoSelector(QWidget):
         t2 = QWidget()
         central_vlayout = QVBoxLayout(t2)
         add_button = QPushButton("+")
-        self.output = neo.Segment()
+        self.outblock = neo.Block()
 
+        self.output = neo.Segment()
+        self.outblock.segments.append(self.output)
         def add_button_clicked(process=None):
             sel = self.get_selection()[0]
             if process == "TTL":
@@ -69,7 +71,7 @@ class QNeoSelector(QWidget):
                     idxs = find_square_pulse_numpy(
                             d,
                             sel.sampling_rate * 0.0004,
-                            (2 * np.std(d)) + np.mean(d)
+                            (2 * np.std(d)) + np.mean(d) # TODO: parameterise this
                     )  
                     idxs_rising = idxs[
                         0
@@ -91,12 +93,22 @@ class QNeoSelector(QWidget):
             elif isinstance(sel, neo.Event):
                 self.output.events.append(sel)
             
+            self.load_neo(self.outblock,self.selectedTreeModel)
         add_button.clicked.connect(add_button_clicked)
 
         add_ttl_button = QPushButton("->TTL")
         add_ttl_button.clicked.connect(lambda: add_button_clicked("TTL"))
 
         minus_button = QPushButton("-")
+
+        def minus_button_clicked():
+            sel = [self.selectedTreeModel.itemFromIndex(x).data() for x in self.selectedTreeView.selectedIndexes()]
+            for s in sel:
+                self.output.analogsignals = [x for x in self.output.analogsignals if id(x) != id(s)]
+                self.output.events = [x for x in self.output.events if id(x)!=id(s)]
+            
+            self.load_neo(self.outblock,self.selectedTreeModel)
+        minus_button.clicked.connect(minus_button_clicked)
         central_vlayout.addWidget(add_button)
         central_vlayout.addWidget(add_ttl_button)
         central_vlayout.addWidget(minus_button)
@@ -111,6 +123,10 @@ class QNeoSelector(QWidget):
         
         self.verticalLayout.addWidget(t)
         but = QPushButton("done")
+
+        def done_clicked():
+            self.state.setSegment(self.output)
+        but.clicked.connect(done_clicked)
         self.verticalLayout.addWidget(but)
 
         self.map = {}
@@ -128,9 +144,11 @@ class QNeoSelector(QWidget):
         
         #c.setText(1, "surprise!")
     
-    def load_neo(self, data:neo.Block, model=None):
+    def load_neo(self, data:neo.Block, model=None, clear=True):
         if model is None:
             model = self.model
+        if clear:
+            model.clear()
         rt = model.invisibleRootItem()
         rt.setColumnCount(1)
         for i,s in enumerate(data.segments):
@@ -138,29 +156,29 @@ class QNeoSelector(QWidget):
             si = QStandardItem(f"{i}-{s.name}")
             si_analogs = QStandardItem("analogs")
             si.appendRow(si_analogs)
-            for i, a in enumerate(s.analogsignals):
-                si2 = QStandardItem(f"{i}-{a.name}")
-                
-                uid = f"analog-{i}"
-                si2.setData(uid)
-                self.map[uid] = a
+            for i2, a in enumerate(s.analogsignals):
+                si2 = QStandardItem(f"{i2}-{a.name}")
+                si2.setData(a)
                 si_analogs.appendRow([si2])
             
             si_events = QStandardItem("events")
-            for i, a in enumerate(s.events):
+            si_units = QStandardItem("units")
+            for i2, a in enumerate(s.events):
                 si2 = QStandardItem(f"{i}-{a.name}")
                 
-                uid = f"events-{i}"
-                si2.setData(uid)
-                self.map[uid] = a
-                si_events.appendRow([si2]) 
+                si2.setData(a)
+                if a.name.startswith("unit"):
+                    si_units.appendRow([si2])
+                else:
+                    si_events.appendRow([si2]) 
+                
             si.appendRow(si_events)
-
+            si.appendRow(si_units)
             rt.appendRow(si)
     
     def get_selection(self):
         rownos = [self.model.itemFromIndex(x).data() for x in self.treeView.selectedIndexes()]
-        return [self.map[r] for r in rownos if r is not None]
+        return [r for r in rownos if r is not None]
 
 
     
