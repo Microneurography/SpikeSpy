@@ -90,6 +90,18 @@ class QNeoSelector(QWidget):
                         "maximum": (idxs[2] * sel.units).rescale("mV"),
                     },
                     )   
+            if process == "wavelet":
+                from .processing import wavelet_denoise
+                import copy
+                d = sel.as_array() 
+                wd = wavelet_denoise(d[:,0])
+                sel = sel.copy()
+                sel[:,0] = (wd * sel.units)[:,np.newaxis]
+
+                sel.name = (sel.name or "") + ".wavelet"
+                del d
+                del wd
+
             if isinstance(sel, neo.AnalogSignal):
                 
                 self.output.analogsignals.append(sel)
@@ -101,6 +113,9 @@ class QNeoSelector(QWidget):
 
         add_ttl_button = QPushButton("->TTL")
         add_ttl_button.clicked.connect(lambda: add_button_clicked("TTL"))
+        add_wlet_button = QPushButton("+ wavelet")
+        add_wlet_button.clicked.connect(lambda: add_button_clicked("wavelet"))
+
 
         minus_button = QPushButton("-")
 
@@ -114,6 +129,7 @@ class QNeoSelector(QWidget):
         minus_button.clicked.connect(minus_button_clicked)
         central_vlayout.addWidget(add_button)
         central_vlayout.addWidget(add_ttl_button)
+        central_vlayout.addWidget(add_wlet_button)
         central_vlayout.addWidget(minus_button)
         
         hboxlayout.addWidget(t2)
