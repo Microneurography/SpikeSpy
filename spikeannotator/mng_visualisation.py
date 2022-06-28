@@ -33,6 +33,7 @@ from .MultiTraceView import MultiTraceView
 from .NeoSettingsView import NeoSettingsView
 from .TrackingView import TrackingView
 from .ViewerState import ViewerState, tracked_neuron_unit
+from .mng_file_selector import QNeoSelector
 
 mplstyle.use('fast')
 
@@ -411,7 +412,8 @@ class MdiView(QMainWindow):
             "SpikeGroupTable": SpikeGroupTableView,
             "SingleTraceView": SingleTraceView,
             "Settings": NeoSettingsView,
-            "TrackingView":TrackingView
+            "TrackingView":TrackingView,
+            "Data": QNeoSelector
         }
         self.cur_windows = []
 
@@ -421,8 +423,8 @@ class MdiView(QMainWindow):
         self.mdi = QMdiArea()
         self.setCentralWidget(self.mdi)
 
-        for k, v in self.window_options.items():
-
+        for k in ['MultiTrace','UnitView','SpikeGroupTable','SingleTraceView','TrackingView']:
+            v = self.window_options[k]
             w = v(parent=self, state=self.state)
             w = self.mdi.addSubWindow(w)
             self.cur_windows.append(w)

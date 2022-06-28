@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QStyledItemDelegate,
 import numpy as np
 
 from spikeannotator.APTrack_experiment_import import TypeID, find_square_pulse_numpy
+from spikeannotator.ViewerState import ViewerState
 
 
 class ComboboxDelegate(QStyledItemDelegate):
@@ -41,9 +42,11 @@ class ComboboxDelegate(QStyledItemDelegate):
         editor.setGeometry(option.rect)
 
 class QNeoSelector(QWidget):
-    def __init__(self, parent=None, state=None):
+    def __init__(self, parent=None, state:ViewerState=None):
         super().__init__(parent)
         self.state = state
+        if self.state is not None:
+            self.state.onLoadNewFile.connect(self.reset)
         self.treeView = QTreeView(self)
         self.model = QStandardItemModel(self)
         self.treeView.setModel(self.model)
@@ -77,7 +80,7 @@ class QNeoSelector(QWidget):
                         0
                     ] 
                     sel = neo.Event(
-                    (idxs_rising / sel.sampling_rate).rescale("s"),
+                    (idxs_rising / sel.sampling_rate).rescale("s") + sel.t_start,
                     type_id=TypeID.TTL.value,
                     name=sel.name,
                     array_annotations={
@@ -125,11 +128,13 @@ class QNeoSelector(QWidget):
         but = QPushButton("done")
 
         def done_clicked():
-            self.state.setSegment(self.output)
+            self.state.set_segment(self.output)
+
         but.clicked.connect(done_clicked)
         self.verticalLayout.addWidget(but)
 
         self.map = {}
+        self.reset()
         # __qtreewidgetitem = QTreeWidgetItem(self.treeWidget)
        
         # __qtreewidgetitem1 = QTreeWidgetItem(__qtreewidgetitem)
@@ -143,7 +148,17 @@ class QNeoSelector(QWidget):
         # __qtreewidgetitem1.setText(1, "test2")
         
         #c.setText(1, "surprise!")
-    
+    def reset(self):
+        self.output
+        blk = neo.Block()
+        from copy import deepcopy
+        seg = deepcopy(self.state.segment)
+        for i,sg in enumerate(self.state.spike_groups):
+            sg.event.name=f"unit_{i}"
+            seg.events.append(sg.event)
+        blk.segments.append(seg)
+        self.load_neo(blk)
+
     def load_neo(self, data:neo.Block, model=None, clear=True):
         if model is None:
             model = self.model

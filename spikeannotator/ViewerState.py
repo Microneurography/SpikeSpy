@@ -52,7 +52,7 @@ class tracked_neuron_unit:
 def create_erp(signal_chan, idxs, offset=-1000, length=30000):
     arr = np.zeros((len(idxs), length))
     for i, x in enumerate(idxs):
-        arr[i] = signal_chan[int(x + offset) : int(x + offset + length)]
+        arr[i].flat[:] = signal_chan[int(x + offset) : int(x + offset + length)]
     return arr
 
 class ViewerState(QObject):
@@ -139,11 +139,11 @@ class ViewerState(QObject):
 
     def update_idx_arrs(self):
         for sg in self.spike_groups:
-            if sg.idx_arr is not None:
-                continue
+            #if sg.idx_arr is not None:
+            #    continue
             p = [None for x in range(len(self.event_signal))]
             for e in sg.event.times:
-                i = int(np.searchsorted(self.event_signal, e).base) - 1
+                i = int(np.searchsorted(self.event_signal, e, side="right").base) - 1
                 x = int(
                     ((e - self.event_signal[i]) * self.analog_signal.sampling_rate).base
                 )
@@ -165,6 +165,7 @@ class ViewerState(QObject):
             self.event_signal = event_signal
         if spike_groups is not None:
             self.spike_groups = spike_groups
+            
 
         # ensure essentials are populated on state
         if self.spike_groups is None:
@@ -194,6 +195,40 @@ class ViewerState(QObject):
             unit = self.cur_spike_group
         return self.spike_groups[unit]
 
+    def set_segment(self,data:neo.Segment):
+
+        kwargs = {}
+        cur_evt= [i for i,x in enumerate(data.events) if id(x)== id(self.event_signal)]
+        if len(cur_evt) == 0:
+            event_signal = data.events[0]
+            kwargs['event_signal'] =event_signal
+        else:
+            event_signal = data.events[cur_evt[0]]
+
+        cur_analogsig = [i for i,x in enumerate(data.analogsignals) if id(x)== id(self.analog_signal)]
+        if len(cur_analogsig) == 0:
+            analog_signal = data.analogsignals[0]
+            kwargs['analog_signal'] = analog_signal
+        else:
+            analog_signal = data.analogsignals[cur_evt[0]]
+
+        spike_event_groups = []
+
+        for x in data.events:
+            if not x.name.startswith("unit"):
+                continue
+
+            spike_event_groups.append(tracked_neuron_unit(event=x)) 
+        
+        cur_sel = [i for i,x in enumerate(spike_event_groups) if id(x.event)== id(self.spike_groups[self.cur_spike_group])]
+        if len(cur_sel) == 0:
+            self.cur_spike_group = 0
+        else:
+            self.cur_spike_group = self.cur_sel[0]
+        
+        self.segment = data
+
+        self.set_data(analog_signal, event_signal, spike_groups=spike_event_groups)
 
 def load_file(data_path, type="h5", **kwargs):
     if type == "h5":
