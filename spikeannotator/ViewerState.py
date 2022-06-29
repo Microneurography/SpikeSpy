@@ -9,9 +9,10 @@ import quantities as pq
 from neo import Event
 from neo.io import NixIO
 from PySide6.QtCore import QObject, Qt, Signal, Slot
+from PySide6.QtWidgets import ( QFileDialog,QInputDialog)
 
 from .APTrack_experiment_import import process_folder as open_aptrack
-
+from .NeoOpenEphyisIO import open_ephys_to_neo
 
 @dataclass
 class tracked_neuron_unit:
@@ -47,7 +48,15 @@ class tracked_neuron_unit:
                 signal_chan.base[event_signal[i].base * signal_chan.sampling_rate.base],
             )
         return p
+    
+    def get_latencies(self, event_signal):
+        p = np.ones(len(event_signal)) * np.nan * pq.ms
+        for e in self.event.times:
+            i = np.searchsorted(event_signal, e) -1
+            p[i] = (e-event_signal[i]).rescale(pq.ms)
+        return p
 
+        
 
 def create_erp(signal_chan, idxs, offset=-1000, length=30000):
     arr = np.zeros((len(idxs), length))
@@ -237,11 +246,17 @@ def load_file(data_path, type="h5", **kwargs):
     # elif type == "dabsys":
         #data = import_dapsys_csv_files(data_path)[0].segments[0]
     elif type == "openEphys":
+        data = open_ephys_to_neo(data_path)
+
+    elif type == "APTrack":
         data = open_aptrack(data_path)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
-    event_signal = data.events[0]
-    signal_chan = data.analogsignals[-1]
+    if len(data.events) == 0:
+        event_signal = Event()
+    else:
+        event_signal = data.events[0]
+    signal_chan = data.analogsignals[0]
 
     spike_event_groups = []
 
@@ -254,3 +269,21 @@ def load_file(data_path, type="h5", **kwargs):
         spike_event_groups.append(tracked_neuron_unit(event=x))
 
     return data, signal_chan, event_signal, spike_event_groups
+
+def prompt_for_neo_file(type):
+    if type is None:
+        type = QInputDialog().getItem(
+            None,
+            "Select file type",
+            "Filetype",
+            ["h5", "openEphys", "APTrack"],
+        )[0]
+
+    if type == "h5":
+        fname = QFileDialog.getOpenFileName(None, "Open")[0]
+    elif type in ("openEphys","APTrack"):
+        fname = QFileDialog.getExistingDirectory(None, "Open OpenEphys")
+    else:
+        raise Exception(f"Unknown filetype: {type}")
+    return fname, type
+

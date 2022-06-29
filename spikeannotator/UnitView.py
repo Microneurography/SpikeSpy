@@ -103,7 +103,7 @@ class UnitView(QMainWindow):
                 self.lines[i].set_visible(False)
 
         self.update_curstim_line(self.state.stimno)
-        self.view.draw()
+        self.view.draw_idle()
 
     @Slot()
     def update_curstim_line(self, stimno):
@@ -127,7 +127,7 @@ class UnitView(QMainWindow):
 
             self.axes["main"].relim()
             self.axes["main"].autoscale_view(True, True, True)
-        self.view.draw()
+        self.view.draw_idle()
 
     @Slot()
     def view_clicked(self, event):

@@ -247,7 +247,7 @@ def process_folder(foldername: str):
         ),  # main,
         APTrackRecording(
             find_channel("ADC4"),
-            TypeID.ANALOG,
+            TypeID.TTL,
             "env.stimVolt",
             "A TTL of the stimulation voltage",
         ),
