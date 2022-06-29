@@ -85,11 +85,12 @@ class ViewerState(QObject):
 
         if len(evt) > 0:
             to_keep = (evt < self.event_signal[self.stimno]) | (
-                evt
+                (evt
                 > self.event_signal[
-                    self.stimno + 1  # TODO: will crash on final stimulation.
+                    self.stimno + 1  
                 ]
-            )  # TODO: we should remove by index, and also use purely the timestamps not idx_arr
+            ) if self.stimno < len(self.event_signal)-1 else False)  # Prevent crash on final index
+            # TODO: we should remove by index, and also use purely the timestamps not idx_arr
             self.spike_groups[self.cur_spike_group].event = evt[to_keep]
             evt = evt[to_keep]
         if latency is None:
@@ -121,7 +122,7 @@ class ViewerState(QObject):
 
     @Slot(int)
     def setStimNo(self, stimno: int):
-        self.stimno = max(min(stimno, self.analog_signal_erp.shape[0]), 0)
+        self.stimno = max(min(stimno, self.analog_signal_erp.shape[0]-1), 0)
         self.onStimNoChange.emit(self.stimno)
 
     @Slot(str, str)

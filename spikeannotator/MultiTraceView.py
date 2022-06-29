@@ -97,6 +97,7 @@ class MultiTraceView(QMainWindow):
         butgrp.addButton(linesRadio)
         butgrp.addButton(heatmapRadio)
         butgrp.addButton(unitOnlyRadio)
+        self.butgrp = butgrp
         
         def buttonToggled(id,checked):
             if heatmapRadio.isChecked():
@@ -133,7 +134,7 @@ class MultiTraceView(QMainWindow):
         self.ax_track_leaf = None
         self.points_spikegroup = None
         self.hline = None
-        
+        self.figcache=None
         self.setup_figure()
         self.update_axis()
 
@@ -225,11 +226,8 @@ class MultiTraceView(QMainWindow):
 
        
         self.view.draw() 
+        self.figcache = self.fig.canvas.copy_from_bbox(self.fig.bbox)
             
-
-
-
-
     def update_ylim(self, curStim):
         if self.lock_to_stim:
             cur_lims = self.ax.get_ylim()
@@ -283,9 +281,12 @@ class MultiTraceView(QMainWindow):
             for i,x in enumerate(self.state.spike_groups):
                 if i == self.state.cur_spike_group:
                     continue
-                self.points_spikegroups.append(plot(i))
+                artists = plot(i)
+                self.points_spikegroups.append(artists)
+                
 
-        self.points_spikegroups.append(plot(self.state.cur_spike_group, color="red"))
+        artists = plot(self.state.cur_spike_group, color="red")
+        self.points_spikegroups.append(artists)
         self.view.draw()
 
     def plot_curstim_line(self, stimNo=None):
