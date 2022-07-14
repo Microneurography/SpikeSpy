@@ -278,7 +278,10 @@ class MultiTraceView(QMainWindow):
                 pass  # TODO optimisation of setting x_data rather than replotting
         else:
             for x in self.points_spikegroups:
-                x.remove()
+                try:
+                    x.remove()
+                except:
+                    pass
         self.points_spikegroups = []
         def plot(sgidx, **kwargs):
             sg = self.state.getUnitGroup(sgidx)
