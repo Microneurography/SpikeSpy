@@ -18,7 +18,6 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (QApplication, QCheckBox, QHBoxLayout,
                                QMainWindow, QSpinBox, QVBoxLayout, QWidget, QGroupBox, QRadioButton, QButtonGroup)
 
-from .APTrack_experiment_import import process_folder as open_aptrack
 from .NeoSettingsView import NeoSettingsView
 from .ViewerState import ViewerState, tracked_neuron_unit
 
@@ -97,6 +96,7 @@ class MultiTraceView(QMainWindow):
         butgrp.addButton(linesRadio)
         butgrp.addButton(heatmapRadio)
         butgrp.addButton(unitOnlyRadio)
+        self.butgrp = butgrp
         
         def buttonToggled(id,checked):
             if heatmapRadio.isChecked():
@@ -133,7 +133,7 @@ class MultiTraceView(QMainWindow):
         self.ax_track_leaf = None
         self.points_spikegroup = None
         self.hline = None
-        
+        self.figcache=None
         self.setup_figure()
         self.update_axis()
 
@@ -146,6 +146,8 @@ class MultiTraceView(QMainWindow):
         self.state.onStimNoChange.connect(self.plot_curstim_line)
         self.state.onLoadNewFile.connect(self.update_axis)
         self.state.onStimNoChange.connect(self.update_ylim)
+        self.state.onUnitGroupChange.connect(lambda *args:self.reset_right_axes_data())
+        self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
 
     def reset_right_axes_data(self):
@@ -155,7 +157,17 @@ class MultiTraceView(QMainWindow):
             return
 
         stimFreq_data = (1/np.diff(self.state.event_signal.times).rescale(pq.second),np.arange(1, len(self.state.event_signal.times)),)
-        self.right_ax_data = {'Stimulation Frequency':stimFreq_data}
+        ug = self.state.getUnitGroup()
+        
+        latencies = ug.get_latencies(self.state.event_signal)
+        idx_na = np.isnan(latencies)
+
+        current_spike_diffs = np.diff(latencies[~idx_na])
+        out = np.ones(latencies.shape) * np.nan *pq.ms
+        out[np.where(~idx_na)[0][1:]] = current_spike_diffs
+        #out[np.isnan(out)] = 0 * pq.ms
+        self.right_ax_data = {'Stimulation Frequency':stimFreq_data, 'latency_diff':(out,np.arange(len(latencies)))}
+        self.plot_right_axis()
 
     def setup_figure(self):
         mode = self.mode
@@ -163,8 +175,7 @@ class MultiTraceView(QMainWindow):
             return
         if self.state.analog_signal is None:
             return
-        for ax in self.ax_right[1:]:
-            ax.remove()
+
         self.ax_right[0].clear()
         self.percentiles = np.percentile(
             np.abs(self.state.analog_signal_erp), np.arange(100)
@@ -208,6 +219,18 @@ class MultiTraceView(QMainWindow):
         self.plot_spikegroups()
         self.plot_curstim_line(self.state.stimno)
 
+        self.plot_right_axis()
+        
+        self.fig.tight_layout()
+
+       
+        self.view.draw_idle() 
+        self.figcache = self.fig.canvas.copy_from_bbox(self.fig.bbox)
+    
+    def plot_right_axis(self):
+        for ax in self.ax_right[1:]:
+            ax.remove()
+            self.ax_right = [self.ax_right[0]]
         # plot right axes
         colorwheel = iter(["r","g","b","orange","purple","green"])
         
@@ -220,22 +243,13 @@ class MultiTraceView(QMainWindow):
             self.ax_right[-1].set_xlabel(label)
             self.ax_right[-1].xaxis.label.set_color(c)
             self.ax_right[-1].tick_params(axis='y', colors=c)
-        
-        self.fig.tight_layout()
-
-       
-        self.view.draw() 
-            
-
-
-
-
+        self.view.draw_idle()
     def update_ylim(self, curStim):
         if self.lock_to_stim:
             cur_lims = self.ax.get_ylim()
             w = max(abs(cur_lims[1] - cur_lims[0]) // 2, 2)
             self.ax.set_ylim(curStim + w, curStim - w)
-            self.view.draw()
+            self.view.draw_idle()
 
     def update_axis(self):
         if self.state is None:
@@ -273,7 +287,7 @@ class MultiTraceView(QMainWindow):
                 [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
             )
             if len(points) == 0:
-                self.view.draw()
+                self.view.draw_idle()
                 return
             return self.ax.scatter(
                 points[:, 0], points[:, 1], s=4, **kwargs
@@ -283,10 +297,13 @@ class MultiTraceView(QMainWindow):
             for i,x in enumerate(self.state.spike_groups):
                 if i == self.state.cur_spike_group:
                     continue
-                self.points_spikegroups.append(plot(i))
+                artists = plot(i)
+                self.points_spikegroups.append(artists)
+                
 
-        self.points_spikegroups.append(plot(self.state.cur_spike_group, color="red"))
-        self.view.draw()
+        artists = plot(self.state.cur_spike_group, color="red")
+        self.points_spikegroups.append(artists)
+        self.view.draw_idle()
 
     def plot_curstim_line(self, stimNo=None):
         if stimNo is None:
@@ -296,7 +313,7 @@ class MultiTraceView(QMainWindow):
             self.hline = self.ax.axhline(stimNo)
         else:
             self.hline.set_ydata(stimNo)
-        self.view.draw()
+        self.view.draw_idle()
 
     def updateAll(self):
         if self.mode!="heatmap":
@@ -306,14 +323,37 @@ class MultiTraceView(QMainWindow):
                 self.percentiles[self.lowerSpinBox.value()],
                 self.percentiles[self.upperSpinBox.value()],
             )
-        self.view.draw()
+        self.view.draw_idle()
 
     def view_clicked(self, e: MouseEvent):
         if self.toolbar.mode != "" or e.button != 1:
             return
 
-        if e.inaxes == self.ax:
-            self.state.setStimNo(round(e.ydata))
+        #if e.inaxes == self.ax:
+        self.state.setStimNo(round(e.ydata))
+
+
+class PolygonSelectorTool:  # This is annoyingly close - there are two styles of tools in matplotlib, and i cannot get this one to work embedded in QT (no toolmanager)
+    """Polygon selector"""
+
+    default_keymap = "S"
+    description = "PolygonSelection"
+    default_toggled = True
+
+    def __init__(self, fig, *args, **kwargs):
+        self.fig = fig
+        self.poly = PolygonSelector(self.fig.axes[0], self.onselect)
+        self.poly.disconnect_events()
+
+    def enable(self, *args):
+        self.poly.connect_default_events()
+
+    def disable(self, *args):
+        self.poly.disconnect_events()
+
+    def onselect(self, verts):
+        print(verts)
+
 
 if __name__ == "__main__":
 
