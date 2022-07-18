@@ -34,8 +34,7 @@ class MultiTraceView(QMainWindow):
     ):
         super().__init__(parent)
         self.state: ViewerState = None
-        if state is not None:
-            self.set_state(state)
+
 
         xsize = 1024
         ysize = 480
@@ -134,6 +133,8 @@ class MultiTraceView(QMainWindow):
         self.points_spikegroup = None
         self.hline = None
         self.figcache=None
+        if state is not None:
+            self.set_state(state)
         self.setup_figure()
         self.update_axis()
 

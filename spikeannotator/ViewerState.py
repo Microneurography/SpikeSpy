@@ -247,6 +247,9 @@ def load_file(data_path, type="h5", **kwargs):
         #data = import_dapsys_csv_files(data_path)[0].segments[0]
     elif type == "openEphys":
         data = open_ephys_to_neo(data_path)
+    
+    elif type == "matlab":
+        data = open_matlab_to_neo(data_path)
 
     elif type == "APTrack":
         data = open_aptrack(data_path)
@@ -276,14 +279,24 @@ def prompt_for_neo_file(type):
             None,
             "Select file type",
             "Filetype",
-            ["h5", "openEphys", "APTrack"],
+            ["h5", "openEphys", "APTrack", "matlab"],
         )[0]
 
     if type == "h5":
         fname = QFileDialog.getOpenFileName(None, "Open")[0]
-    elif type in ("openEphys","APTrack"):
+    elif type in ("openEphys","APTrack","matlab"):
         fname = QFileDialog.getExistingDirectory(None, "Open OpenEphys")
     else:
         raise Exception(f"Unknown filetype: {type}")
     return fname, type
 
+def open_matlab_to_neo(folder):
+    from scipy.io import loadmat
+    from pathlib import Path
+    matfiles = Path(folder).glob("*.mat")
+    seg = neo.Segment()
+    for m in matfiles:
+        mf = loadmat(m)
+        asig = neo.AnalogSignal(mf['data'].T, pq.V, sampling_rate = mf['samplerate'][0,0] *pq.Hz, name=m.stem)
+        seg.analogsignals.append(asig)
+    return seg
