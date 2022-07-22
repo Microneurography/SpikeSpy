@@ -11,7 +11,7 @@ def open_ephys_to_neo(foldername):
     This will create a block from an openephys folder
 
     """
-    all_files = list(Path(foldername).glob("*.continuous"))
+    all_files = list(Path(foldername).glob("*_2.continuous"))
     all_files.sort()
     
     seg = Segment()

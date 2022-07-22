@@ -90,6 +90,7 @@ class UnitView(QMainWindow):
         sig_erp = self.state.analog_signal_erp
         idx_arr = sg.idx_arr
         self.lines = {}
+        # todo: move this to setup, update the current line. at the moment this causes slowdown of ui
         for i, idx, d in zip(range(len(sig_erp)), idx_arr, sig_erp):
             if idx is None:
                 ydata = np.zeros(self.w * 2)

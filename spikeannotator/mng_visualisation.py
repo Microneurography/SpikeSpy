@@ -1,3 +1,4 @@
+import cProfile
 import copy
 import sys
 from dataclasses import dataclass, field
@@ -16,13 +17,13 @@ from matplotlib.widgets import PolygonSelector
 from neo.io import NixIO
 from PySide6.QtCore import (QAbstractTableModel, QModelIndex, QObject, Qt,
                             Signal, Slot)
-from PySide6.QtGui import QAction, QColor
+from PySide6.QtGui import QAction, QColor, QShortcut, QKeySequence
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
                                QComboBox, QDialog, QFileDialog, QFormLayout,
                                QHBoxLayout, QInputDialog, QMainWindow,
                                QMdiArea, QMdiSubWindow, QMenu, QMenuBar,
                                QPushButton, QSpinBox, QTableView, QVBoxLayout,
-                               QWidget)
+                               QWidget, QMessageBox)
 
 from .APTrack_experiment_import import process_folder as open_aptrack
 from .mng_file_selector import QNeoSelector
@@ -90,7 +91,73 @@ class MdiView(QMainWindow):
         file_menu.addAction(
             QAction("Export as csv", self, shortcut= "Ctrl+E", triggered=self.export_csv )
         )
-    
+
+        # key shortcuts
+        self.profiler = cProfile.Profile()
+        self.is_profiling = False
+        self.shortcut_profile = QShortcut(QKeySequence(Qt.Key_F1),self)
+        def profile():
+            if self.is_profiling:
+                self.profiler.disable()
+                self.is_profiling=False
+                nom = QFileDialog.getSaveFileName(self, "Export profile")
+                if nom is None:
+
+                    
+                    return
+                self.profiler.dump_stats(nom[0])
+                self.profiler = cProfile.Profile()  
+                
+            else:
+                self.is_profiling=True
+                self.profiler.enable()
+        self.shortcut_profile.activated.connect(lambda : profile())
+
+        self.shortcut_next = QShortcut(QKeySequence(Qt.Key_Down),self)
+        self.shortcut_next.activated.connect(lambda: self.state.setStimNo(self.state.stimno + 1))
+        
+        self.shortcut_prev = QShortcut(QKeySequence(Qt.Key_Up), self)
+        self.shortcut_prev.activated.connect(lambda:self.state.setStimNo(self.state.stimno - 1))
+
+        self.shortcut_del = QShortcut(QKeySequence(Qt.Key_Backspace), self)
+        self.shortcut_del.activated.connect(lambda: self.state.setUnit(None))
+        
+        
+        def move(dist=1):
+             self.state.setUnit(
+                (
+                    self.state.spike_groups[self.state.cur_spike_group].idx_arr[
+                        self.state.stimno
+                    ]
+                )[0]
+                + dist  # TODO: make method
+            )
+        self.shortcut_left = QShortcut(QKeySequence(Qt.Key_Left), self)
+        self.shortcut_left.activated.connect(lambda:move(-1))
+      
+        self.shortcut_right = QShortcut(QKeySequence(Qt.Key_Right), self)
+        self.shortcut_right.activated.connect(lambda:move(1))
+
+        # elif e.key() == Qt.Key_Left:
+        #     self.set_cur_pos(
+        #         (
+        #             self.state.spike_groups[self.state.cur_spike_group].idx_arr[
+        #                 self.state.stimno
+        #             ]
+        #             or [np.int(np.mean(self.ax.get_xlim()))]
+        #         )[0]
+        #         - dist  # TODO: make method
+        #     )
+        # elif e.key() == Qt.Key_Right:
+        #     self.set_cur_pos(
+        #         (
+        #             self.state.spike_groups[self.state.cur_spike_group].idx_arr[
+        #                 self.state.stimno
+        #             ]
+        #             or [np.int(np.mean(self.ax.get_xlim()))]
+        #         )[0]
+        #         + dist
+        #     )
     def export_csv(self):
         save_filename = QFileDialog.getSaveFileName(self, "Export")[0]
         from csv import writer

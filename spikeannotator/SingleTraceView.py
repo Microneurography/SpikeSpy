@@ -82,17 +82,19 @@ class SingleTraceView(QMainWindow):
             lambda x, pos: "{0:g}".format(1000 * x / self.state.sampling_rate)
         )
         self.ax.xaxis.set_major_formatter(func_formatter)
-        self.ax.set_xticks(
-            np.arange(
-                0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 100
-            )
-        )
-        self.ax.set_xticks(
-            np.arange(
-                0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 1000
-            ),
-            minor=True,
-        )
+        loc = matplotlib.ticker.MultipleLocator(base=self.state.sampling_rate / 100) # this locator puts ticks at regular intervals
+        self.ax.xaxis.set_major_locator(loc)
+        # self.ax.set_xticks(
+        #     np.arange(
+        #         0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 100
+        #     )
+        # )
+        # self.ax.set_xticks(
+        #     np.arange(
+        #         0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 1000
+        #     ),
+        #     minor=True,
+        # )
         self.ax.grid(True, which="both")
 
         if self.trace_line_cache is not None:
@@ -119,7 +121,6 @@ class SingleTraceView(QMainWindow):
 
         else:
             self.identified_spike_line.set_visible(False)
-
         self.view.draw_idle()
 
     def set_cur_pos(self, x):
@@ -137,34 +138,7 @@ class SingleTraceView(QMainWindow):
     def keyPressEvent(self, e):
         dist = max(self.select_local_maxima_width + 1, 1)
 
-        if e.key() == Qt.Key_Down:
-            self.state.setStimNo(self.state.stimno + 1)
-        elif e.key() == Qt.Key_Up:
-            self.state.setStimNo(self.state.stimno - 1)
-        elif e.key() in (Qt.Key_Delete, Qt.Key_D):
-            self.state.setUnit(None)
-
-        elif e.key() == Qt.Key_Left:
-            self.set_cur_pos(
-                (
-                    self.state.spike_groups[self.state.cur_spike_group].idx_arr[
-                        self.state.stimno
-                    ]
-                    or [np.int(np.mean(self.ax.get_xlim()))]
-                )[0]
-                - dist  # TODO: make method
-            )
-        elif e.key() == Qt.Key_Right:
-            self.set_cur_pos(
-                (
-                    self.state.spike_groups[self.state.cur_spike_group].idx_arr[
-                        self.state.stimno
-                    ]
-                    or [np.int(np.mean(self.ax.get_xlim()))]
-                )[0]
-                + dist
-            )
-        elif e.key() == Qt.Key_C:
+        if e.key() == Qt.Key_C:
             try:
                 sg = self.state.spike_groups[self.state.cur_spike_group].idx_arr
                 new_x = next(

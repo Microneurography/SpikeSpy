@@ -244,7 +244,10 @@ class MultiTraceView(QMainWindow):
             self.ax_right[-1].set_xlabel(label)
             self.ax_right[-1].xaxis.label.set_color(c)
             self.ax_right[-1].tick_params(axis='y', colors=c)
-        self.view.draw_idle()
+        for ax in self.ax_right:
+            ax.redraw_in_frame()
+        self.view.update()
+
     def update_ylim(self, curStim):
         if self.lock_to_stim:
             cur_lims = self.ax.get_ylim()
@@ -260,18 +263,21 @@ class MultiTraceView(QMainWindow):
         func_formatter = matplotlib.ticker.FuncFormatter(
             lambda x, pos: "{0:g}".format(1000 * x / self.state.sampling_rate)
         )
+      
         self.ax.xaxis.set_major_formatter(func_formatter)
-        self.ax.set_xticks(
-            np.arange(
-                0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 100
-            )
-        )
-        self.ax.set_xticks(
-            np.arange(
-                0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 1000
-            ),
-            minor=True,
-        )
+        loc = matplotlib.ticker.MultipleLocator(base=self.state.sampling_rate / 100) # this locator puts ticks at regular intervals
+        self.ax.xaxis.set_major_locator(loc)
+        # self.ax.set_xticks(
+        #     np.arange(
+        #         0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 100
+        #     )
+        # )
+        # self.ax.set_xticks(
+        #     np.arange(
+        #         0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 1000
+        #     ),
+        #     minor=True,
+        # )
         # self.ax.grid(True, which="both")
     points_spikegroups = None
     def plot_spikegroups(self, sgidx=None):
@@ -307,7 +313,8 @@ class MultiTraceView(QMainWindow):
 
         artists = plot(self.state.cur_spike_group, color="red")
         self.points_spikegroups.append(artists)
-        self.view.draw_idle()
+        self.ax.redraw_in_frame()
+        self.view.update()
 
     def plot_curstim_line(self, stimNo=None):
         if stimNo is None:
@@ -317,7 +324,10 @@ class MultiTraceView(QMainWindow):
             self.hline = self.ax.axhline(stimNo)
         else:
             self.hline.set_ydata(stimNo)
-        self.view.draw_idle()
+        import matplotlib
+         
+        self.ax.redraw_in_frame()
+        self.view.update()
 
     def updateAll(self):
         if self.mode!="heatmap":
@@ -327,7 +337,8 @@ class MultiTraceView(QMainWindow):
                 self.percentiles[self.lowerSpinBox.value()],
                 self.percentiles[self.upperSpinBox.value()],
             )
-        self.view.draw_idle()
+            self.ax_track_cmap.draw_artist(self.ax_track_cmap.images[0])
+            self.view.update()
 
     def view_clicked(self, e: MouseEvent):
         if self.toolbar.mode != "" or e.button != 1:
