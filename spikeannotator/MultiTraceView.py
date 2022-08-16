@@ -53,6 +53,7 @@ class MultiTraceView(QMainWindow):
         # self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
         # create widgets
         self.view = FigureCanvas(self.fig)
+        self.view.update()
         # self.ps = PolygonSelectorTool(self.fig)
         # self.ps.enable()
         self.toolbar = NavigationToolbar2QT(self.view, self)
@@ -216,7 +217,7 @@ class MultiTraceView(QMainWindow):
         if self.points_spikegroup is not None:
             self.points_spikegroup.remove()
             self.points_spikegroup = None
-
+        self.view.update()
         self.plot_spikegroups()
         self.plot_curstim_line(self.state.stimno)
 
@@ -245,7 +246,10 @@ class MultiTraceView(QMainWindow):
             self.ax_right[-1].xaxis.label.set_color(c)
             self.ax_right[-1].tick_params(axis='y', colors=c)
         for ax in self.ax_right:
-            ax.redraw_in_frame()
+            try:
+                ax.redraw_in_frame()
+            except:
+                pass
         self.view.update()
 
     def update_ylim(self, curStim):
@@ -313,7 +317,7 @@ class MultiTraceView(QMainWindow):
 
         artists = plot(self.state.cur_spike_group, color="red")
         self.points_spikegroups.append(artists)
-        self.ax.redraw_in_frame()
+        #self.ax.redraw_in_frame()
         self.view.update()
 
     def plot_curstim_line(self, stimNo=None):
@@ -324,9 +328,8 @@ class MultiTraceView(QMainWindow):
             self.hline = self.ax.axhline(stimNo)
         else:
             self.hline.set_ydata(stimNo)
-        import matplotlib
          
-        self.ax.redraw_in_frame()
+        #self.ax.redraw_in_frame()
         self.view.update()
 
     def updateAll(self):
@@ -337,7 +340,7 @@ class MultiTraceView(QMainWindow):
                 self.percentiles[self.lowerSpinBox.value()],
                 self.percentiles[self.upperSpinBox.value()],
             )
-            self.ax_track_cmap.draw_artist(self.ax_track_cmap.images[0])
+            self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
             self.view.update()
 
     def view_clicked(self, e: MouseEvent):
