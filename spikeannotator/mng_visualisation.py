@@ -123,13 +123,27 @@ class MdiView(QMainWindow):
         self.shortcut_del.activated.connect(lambda: self.state.setUnit(None))
         
         
+        self.move_mode = "snap"
         def move(dist=1):
-             self.state.setUnit(
-                (
+            cur_point =  (
                     self.state.spike_groups[self.state.cur_spike_group].idx_arr[
                         self.state.stimno
                     ]
                 )[0]
+            if self.move_mode =="snap":
+                from scipy.signal import find_peaks
+                dpts = self.state.analog_signal_erp[self.state.stimno]
+                pts,_ = find_peaks(dpts)
+                pts_down,_ = find_peaks(-1*dpts)
+                pts = np.sort(np.hstack([pts,pts_down]).flatten())
+                i = pts.searchsorted(cur_point)
+                if pts[i] == cur_point:
+                    dist = pts[i+dist] - cur_point
+                else:
+                    dist = pts[i+dist-1] - cur_point
+
+            self.state.setUnit(
+               cur_point
                 + dist  # TODO: make method
             )
         self.shortcut_left = QShortcut(QKeySequence(Qt.Key_Left), self)
@@ -137,27 +151,13 @@ class MdiView(QMainWindow):
       
         self.shortcut_right = QShortcut(QKeySequence(Qt.Key_Right), self)
         self.shortcut_right.activated.connect(lambda:move(1))
+        self.shortcut_snap = QShortcut(QKeySequence(Qt.Key_S),self)
+        def toggle_snap():
+            self.move_mode = None if self.move_mode=="snap" else "snap"
+        self.shortcut_snap.activated.connect(toggle_snap)
+        
 
-        # elif e.key() == Qt.Key_Left:
-        #     self.set_cur_pos(
-        #         (
-        #             self.state.spike_groups[self.state.cur_spike_group].idx_arr[
-        #                 self.state.stimno
-        #             ]
-        #             or [np.int(np.mean(self.ax.get_xlim()))]
-        #         )[0]
-        #         - dist  # TODO: make method
-        #     )
-        # elif e.key() == Qt.Key_Right:
-        #     self.set_cur_pos(
-        #         (
-        #             self.state.spike_groups[self.state.cur_spike_group].idx_arr[
-        #                 self.state.stimno
-        #             ]
-        #             or [np.int(np.mean(self.ax.get_xlim()))]
-        #         )[0]
-        #         + dist
-        #     )
+
     def export_csv(self):
         save_filename = QFileDialog.getSaveFileName(self, "Export")[0]
         from csv import writer
