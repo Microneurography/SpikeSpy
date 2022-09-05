@@ -252,7 +252,9 @@ def load_file(data_path, type="h5", **kwargs):
         data = open_matlab_to_neo(data_path)
 
     elif type == "APTrack":
-        data = open_aptrack(data_path)
+        d = QInputDialog(None).getInt(None,"Record number","record number",minValue=1,step=1)
+        t = d[0] if d[1] else ""
+        data = open_aptrack(data_path, t)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
     if len(data.events) == 0:
