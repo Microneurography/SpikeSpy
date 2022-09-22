@@ -28,7 +28,7 @@ jobs:
         run: pip install poetry && poetry install
 
       - name: pyinstaller
-        run: poetry run pyinstaller -F spikeannotator/SpikeSpy.py
+        run: poetry run pyinstaller SpikeSpy.spec
         
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
