@@ -29,10 +29,14 @@ jobs:
 
       - name: pyinstaller
         run: poetry run pyinstaller SpikeSpy.spec
-        
+      - uses: actions/upload-artifact@v3
+        with:
+          name: my-artifact
+          path: dist/*.exe
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
           files: |
             dist/*
+          automatic_release_tag: latest
