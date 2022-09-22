@@ -258,7 +258,7 @@ def load_file(data_path, type="h5", **kwargs):
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
     elif type =="spike2":
-        neo.Spike2IO(data_path)
+        data = neo.Spike2IO(data_path)
     if len(data.events) == 0:
         event_signal = Event()
     else:
