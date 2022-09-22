@@ -286,7 +286,7 @@ def prompt_for_neo_file(type):
             ["h5", "openEphys", "APTrack", "matlab", "spike2"],
         )[0]
 
-    if type == "h5":
+    if type  in ("h5","spike2"):
         fname = QFileDialog.getOpenFileName(None, "Open")[0]
     elif type in ("openEphys","APTrack","matlab"):
         fname = QFileDialog.getExistingDirectory(None, "Open OpenEphys")
