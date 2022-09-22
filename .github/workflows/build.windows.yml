@@ -23,11 +23,12 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
-          
-      - name: Pyinstaller
-        steps:
-          - run: poetry install
-          - run: pyinstaller -F spikeannotator/SpikeSpy.py
+        
+      - name: poetry install
+        run: poetry install
+        
+      - name: pyinstaller
+        run: pyinstaller -F spikeannotator/SpikeSpy.py
         
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
