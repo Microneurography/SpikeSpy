@@ -257,6 +257,8 @@ def load_file(data_path, type="h5", **kwargs):
         data = open_aptrack(data_path, t)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
+    elif type =="spike2":
+        neo.Spike2IO(data_path)
     if len(data.events) == 0:
         event_signal = Event()
     else:
@@ -281,7 +283,7 @@ def prompt_for_neo_file(type):
             None,
             "Select file type",
             "Filetype",
-            ["h5", "openEphys", "APTrack", "matlab"],
+            ["h5", "openEphys", "APTrack", "matlab", "spike2"],
         )[0]
 
     if type == "h5":

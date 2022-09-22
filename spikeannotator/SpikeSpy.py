@@ -17,7 +17,7 @@ from matplotlib.widgets import PolygonSelector
 from neo.io import NixIO
 from PySide6.QtCore import (QAbstractTableModel, QModelIndex, QObject, Qt,
                             Signal, Slot)
-from PySide6.QtGui import QAction, QColor, QShortcut, QKeySequence
+from PySide6.QtGui import QAction, QColor, QShortcut, QKeySequence, QIcon, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
                                QComboBox, QDialog, QFileDialog, QFormLayout,
                                QHBoxLayout, QInputDialog, QMainWindow,
@@ -305,6 +305,8 @@ def align_spikegroup(spikegroup, erp_arr):
 
 def run():
     app = QApplication(sys.argv)
+    icon_path = Path(sys.modules[__name__].__file__ ).parent / "icon.svg"
+    app.setWindowIcon(QIcon(QPixmap(str(icon_path))))
     # data, signal_chan, event_signal, spike_groups = load_file(
     # )
     # w = TraceView(

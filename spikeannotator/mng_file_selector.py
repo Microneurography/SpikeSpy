@@ -168,8 +168,10 @@ class QNeoSelector(QWidget):
         self.output
         blk = neo.Block()
         from copy import deepcopy
+        if self.state.segment is None:
+            return
         seg = deepcopy(self.state.segment)
-        for i,sg in enumerate(self.state.spike_groups):
+        for i,sg in enumerate(self.state.spike_groups or []):
             sg.event.name=f"unit_{i}"
             seg.events.append(sg.event)
         blk.segments.append(seg)
