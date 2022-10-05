@@ -1,6 +1,9 @@
 from functools import lru_cache
+from pathlib import Path
 import sys
 from dataclasses import dataclass, field
+from tempfile import tempdir
+import tempfile
 from turtle import update
 from typing import Any, List, Optional, Union
 
@@ -14,6 +17,36 @@ from PySide6.QtWidgets import ( QFileDialog,QInputDialog)
 
 from .APTrack_experiment_import import process_folder as open_aptrack
 from .NeoOpenEphyisIO import open_ephys_to_neo
+
+class lru_numpy_memmap:
+    def __init__(self):
+        self.cache_dir = tempfile.gettempdir()
+        self.cache_dict = {}
+    def clear_cache(self):
+        for k,v in self.cache_dict.items():
+            assert Path(v).parent == Path(self.cache_dir)
+            Path(v).unlink()
+        self.cache_dict = {}
+
+    def __call__(self, func,  keyfunc=None, ):
+        if keyfunc is None:
+            keyfunc = lambda *args, **kwargs: ";".join([str(hash(a)) for a in args ] + [f"{k}={hash(v)}" for k,v in kwargs])
+
+        def _(*args,**kwargs):
+            key = keyfunc(*args,**kwargs)
+            if key not in self.cache_dict:
+                res = func(*args, **kwargs)
+                tmpfile_loc = tempfile.mkstemp(dir = self.cache_dir)[1] + ".npy"
+                self.cache_dict[key] = tmpfile_loc
+
+                np.save(tmpfile_loc,res)
+                del res
+
+            return np.load(self.cache_dict[key],mmap_mode="r+")
+            
+        _.cache_clear = self.clear_cache
+        return _
+            
 
 @dataclass
 class tracked_neuron_unit:
@@ -181,10 +214,10 @@ class ViewerState(QObject):
         events_idx = next(i for i,x in enumerate(self.segment.events) if x.name == event_signal.name)
         return self._get_erp(signal_idx, events_idx, channel)
 
-    @lru_cache(10)
+    @lru_numpy_memmap()
     def _get_erp(self,signal_idx=None,event_signal_idx=None, channel=0):
         signal = self.segment.analogsignals[signal_idx]
-        event_signal = self.segment.events[signal_idx]
+        event_signal = self.segment.events[event_signal_idx]
 
         s = int(np.array(signal.sampling_rate.base) // 2)  # 500ms #TODO: this should be adjustable
         erp = create_erp(

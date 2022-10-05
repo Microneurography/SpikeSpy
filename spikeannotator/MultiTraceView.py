@@ -1,3 +1,4 @@
+import itertools
 import sys
 from dataclasses import dataclass, field
 
@@ -46,9 +47,10 @@ class MultiTraceView(QMainWindow):
         self.mode = "heatmap"
 
 
-        gs = self.fig.add_gridspec(1,2, width_ratios=[5,1])
-        self.ax = self.fig.add_subplot(gs[0,0])
-        self.ax_right = [self.fig.add_subplot(gs[0,1], sharey=self.ax)]
+        self.gs = self.fig.add_gridspec(1,2, width_ratios=[3,1])
+        self.ax = self.fig.add_subplot(self.gs[0,0])
+        self.ax_right = []
+        #self.ax_right_fig = self.fig.add_subfigure(self.gs[0,1])
     
         # self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
         # create widgets
@@ -181,7 +183,7 @@ class MultiTraceView(QMainWindow):
         if self.state.analog_signal is None:
             return
 
-        self.ax_right[0].clear()
+        #self.ax_right_fig.clear()
         self.percentiles = np.percentile(
             np.abs(self.state.get_erp()), np.arange(100)
         )
@@ -233,27 +235,27 @@ class MultiTraceView(QMainWindow):
         self.figcache = self.fig.canvas.copy_from_bbox(self.fig.bbox)
     
     def plot_right_axis(self):
-        for ax in self.ax_right[1:]:
+        for ax in self.ax_right:
             ax.remove()
-            self.ax_right = [self.ax_right[0]]
+        self.ax_right = []
+        gs00 = matplotlib.gridspec.GridSpecFromSubplotSpec(1, len(self.right_ax_data.keys()), subplot_spec=self.gs[0,1])
         # plot right axes
-        colorwheel = iter(["r","g","b","orange","purple","green"])
-        
+        colorwheel = itertools.cycle(iter(["r","g","b","orange","purple","green"]))
+        #self.fig.subfigures()
         for i, (label,data) in enumerate(self.right_ax_data.items()):
-            if i>0:
-                newax = self.ax_right[0].twiny()
-                self.ax_right.append(newax)
+            self.ax_right.append(self.fig.add_subplot(gs00[0,i],sharey=self.ax))
+            self.ax_right[i].set_yticks([])
             c = next(colorwheel)    
-            self.ax_right[-1].plot(*data, label=label, color=c)
-            self.ax_right[-1].set_xlabel(label)
-            self.ax_right[-1].xaxis.label.set_color(c)
-            self.ax_right[-1].tick_params(axis='y', colors=c)
+            self.ax_right[i].plot(*data, label=label, color=c)
+            self.ax_right[i].set_xlabel(label)
+            self.ax_right[i].xaxis.label.set_color(c)
+            self.ax_right[i].tick_params(axis='y', colors=c)
         for ax in self.ax_right:
             try:
                 ax.redraw_in_frame()
             except:
                 pass
-        #self.view.update()
+        self.view.update()
 
     def update_ylim(self, curStim):
         if self.lock_to_stim:
