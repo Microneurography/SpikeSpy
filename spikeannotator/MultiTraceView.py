@@ -53,7 +53,7 @@ class MultiTraceView(QMainWindow):
         # self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
         # create widgets
         self.view = FigureCanvas(self.fig)
-        self.view.update()
+        #self.view.update()
         # self.ps = PolygonSelectorTool(self.fig)
         # self.ps.enable()
         self.toolbar = NavigationToolbar2QT(self.view, self)
@@ -169,6 +169,9 @@ class MultiTraceView(QMainWindow):
         out[np.where(~idx_na)[0][1:]] = current_spike_diffs
         #out[np.isnan(out)] = 0 * pq.ms
         self.right_ax_data = {'Stimulation Frequency':stimFreq_data, 'latency_diff':(out,np.arange(len(latencies)))}
+        for x in self.state.segment.analogsignals:
+            x.__hash__ = lambda x: hash(x.name)
+            self.right_ax_data[x.name] = (np.mean(self.state.get_erp(x, self.state.event_signal),axis=1),np.arange(0, len(self.state.event_signal.times)))
         self.plot_right_axis()
 
     def setup_figure(self):
@@ -180,7 +183,7 @@ class MultiTraceView(QMainWindow):
 
         self.ax_right[0].clear()
         self.percentiles = np.percentile(
-            np.abs(self.state.analog_signal_erp), np.arange(100)
+            np.abs(self.state.get_erp()), np.arange(100)
         )
         if self.ax_track_leaf is not None:
             [x.remove() for x in self.ax_track_leaf]
@@ -192,7 +195,7 @@ class MultiTraceView(QMainWindow):
         if mode=="heatmap":
 
             self.ax_track_cmap = self.ax.imshow(
-                np.abs(self.state.analog_signal_erp),
+                np.abs(self.state.get_erp()),
                 aspect="auto",
                 cmap="gray_r",
                 clim=(self.percentiles[40], self.percentiles[95]),
@@ -202,7 +205,7 @@ class MultiTraceView(QMainWindow):
 
             p90 = self.percentiles[95] * 4
             analog_signal_erp_norm = np.clip(
-                self.state.analog_signal_erp, -p90, p90
+                self.state.get_erp(), -p90, p90
             ) / (p90 * 2)
             self.ax_track_leaf = self.ax.plot(
                 (
@@ -217,7 +220,7 @@ class MultiTraceView(QMainWindow):
         if self.points_spikegroup is not None:
             self.points_spikegroup.remove()
             self.points_spikegroup = None
-        self.view.update()
+        #self.view.update()
         self.plot_spikegroups()
         self.plot_curstim_line(self.state.stimno)
 
@@ -250,7 +253,7 @@ class MultiTraceView(QMainWindow):
                 ax.redraw_in_frame()
             except:
                 pass
-        self.view.update()
+        #self.view.update()
 
     def update_ylim(self, curStim):
         if self.lock_to_stim:
@@ -317,8 +320,11 @@ class MultiTraceView(QMainWindow):
 
         artists = plot(self.state.cur_spike_group, color="red")
         self.points_spikegroups.append(artists)
-        #self.ax.redraw_in_frame()
-        self.view.update()
+        try:
+            self.ax.redraw_in_frame()
+        except:
+            pass
+        self.view.draw_idle()
 
     def plot_curstim_line(self, stimNo=None):
         if stimNo is None:
@@ -330,7 +336,8 @@ class MultiTraceView(QMainWindow):
             self.hline.set_ydata(stimNo)
          
         #self.ax.redraw_in_frame()
-        self.view.update()
+        self.view.draw_idle()
+        #self.view.update()
 
     def updateAll(self):
         if self.mode!="heatmap":
@@ -341,7 +348,7 @@ class MultiTraceView(QMainWindow):
                 self.percentiles[self.upperSpinBox.value()],
             )
             self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
-            self.view.update()
+            #self.view.update()
 
     def view_clicked(self, e: MouseEvent):
         if self.toolbar.mode != "" or e.button != 1:

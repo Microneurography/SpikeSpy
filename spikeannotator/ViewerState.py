@@ -1,3 +1,4 @@
+from functools import lru_cache
 import sys
 from dataclasses import dataclass, field
 from turtle import update
@@ -78,10 +79,13 @@ class ViewerState(QObject):
         self.stimno = 0
         self.cur_spike_group = 0
         self.trace_count = 3
-        self.analog_signal_erp = None
         self.analog_signal: neo.AnalogSignal = None
         self.sampling_rate = None
         self.event_signal: neo.Event = None
+
+    @property
+    def analog_signal_erp(self):
+        return self.get_erp()
 
     @Slot(int)
     def setUnitGroup(self, unitid: int):
@@ -162,6 +166,36 @@ class ViewerState(QObject):
 
             sg.idx_arr = p
 
+    def get_erp(
+        self,
+        signal:neo.AnalogSignal = None,
+        event_signal: neo.Event = None,
+        channel = 0
+    ):
+        if signal is None:
+            signal = self.analog_signal
+        if event_signal is None:
+            event_signal = self.event_signal
+        
+        signal_idx = next(i for i,x in enumerate(self.segment.analogsignals) if x.name==signal.name)
+        events_idx = next(i for i,x in enumerate(self.segment.events) if x.name == event_signal.name)
+        return self._get_erp(signal_idx, events_idx, channel)
+
+    @lru_cache(10)
+    def _get_erp(self,signal_idx=None,event_signal_idx=None, channel=0):
+        signal = self.segment.analogsignals[signal_idx]
+        event_signal = self.segment.events[signal_idx]
+
+        s = int(np.array(signal.sampling_rate.base) // 2)  # 500ms #TODO: this should be adjustable
+        erp = create_erp(
+            signal.rescale("mV").as_array()[:, channel],
+            (event_signal.as_array() - signal.t_start.base)
+            * np.array(signal.sampling_rate, dtype=int),
+            0,
+            s,
+        )
+        return erp
+
     def set_data(
         self,
         analog_signal=None,
@@ -169,6 +203,7 @@ class ViewerState(QObject):
         other_signals=None,
         spike_groups=None,
     ):
+        self._get_erp.cache_clear()
         if analog_signal is not None:
             self.analog_signal = analog_signal
         if event_signal is not None:
@@ -186,13 +221,7 @@ class ViewerState(QObject):
             event_signal = neo.Event()
 
         s = int(np.array(self.analog_signal.sampling_rate.base) // 2)  # 500ms
-        self.analog_signal_erp = create_erp(
-            self.analog_signal.rescale("mV").as_array()[:, 0],
-            (self.event_signal.as_array() - self.analog_signal.t_start.base)
-            * np.array(self.analog_signal.sampling_rate, dtype=int),
-            0,
-            s,
-        )
+ 
         self.sampling_rate = int(np.array(self.analog_signal.sampling_rate.base))
         if len(self.spike_groups) == 0:
             self.spike_groups.append(tracked_neuron_unit(event=Event()))
