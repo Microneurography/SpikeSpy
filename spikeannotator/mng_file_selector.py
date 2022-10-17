@@ -45,8 +45,10 @@ class QNeoSelector(QWidget):
     def __init__(self, parent=None, state:ViewerState=None):
         super().__init__(parent)
         self.state = state
-        if self.state is not None:
-            self.state.onLoadNewFile.connect(self.reset)
+        if self.state is None:
+            self.state = ViewerState()
+
+        self.state.onLoadNewFile.connect(self.reset)
         self.treeView = QTreeView(self)
         self.model = QStandardItemModel(self)
         self.treeView.setModel(self.model)

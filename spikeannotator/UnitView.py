@@ -126,8 +126,8 @@ class UnitView(QMainWindow):
                 self.selected_line.set_visible(True)
                 self.selected_line.set_ydata(yarr)
 
-            self.axes["main"].relim()
-            self.axes["main"].autoscale_view(True, True, True)
+            #self.axes["main"].relim()
+            #self.axes["main"].autoscale_view(True, True, True)
         self.view.draw_idle()
 
     @Slot()

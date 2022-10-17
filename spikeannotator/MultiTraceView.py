@@ -1,3 +1,4 @@
+import itertools
 import sys
 from dataclasses import dataclass, field
 
@@ -34,7 +35,11 @@ class MultiTraceView(QMainWindow):
     ):
         super().__init__(parent)
         self.state: ViewerState = None
-
+        self.ax_track_cmap = None
+        self.ax_track_leaf = None
+        self.points_spikegroup = None
+        self.hline = None
+        self.figcache=None
 
         xsize = 1024
         ysize = 480
@@ -46,14 +51,15 @@ class MultiTraceView(QMainWindow):
         self.mode = "heatmap"
 
 
-        gs = self.fig.add_gridspec(1,2, width_ratios=[5,1])
-        self.ax = self.fig.add_subplot(gs[0,0])
-        self.ax_right = [self.fig.add_subplot(gs[0,1], sharey=self.ax)]
+        self.gs = self.fig.add_gridspec(1,2, width_ratios=[3,1])
+        self.ax = self.fig.add_subplot(self.gs[0,0])
+        self.ax_right = []
+        #self.ax_right_fig = self.fig.add_subfigure(self.gs[0,1])
     
         # self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
         # create widgets
         self.view = FigureCanvas(self.fig)
-        self.view.update()
+        #self.view.update()
         # self.ps = PolygonSelectorTool(self.fig)
         # self.ps.enable()
         self.toolbar = NavigationToolbar2QT(self.view, self)
@@ -129,11 +135,7 @@ class MultiTraceView(QMainWindow):
         self.setCentralWidget(w)
 
         self.percentiles = []
-        self.ax_track_cmap = None
-        self.ax_track_leaf = None
-        self.points_spikegroup = None
-        self.hline = None
-        self.figcache=None
+
         if state is not None:
             self.set_state(state)
         self.setup_figure()
@@ -169,6 +171,9 @@ class MultiTraceView(QMainWindow):
         out[np.where(~idx_na)[0][1:]] = current_spike_diffs
         #out[np.isnan(out)] = 0 * pq.ms
         self.right_ax_data = {'Stimulation Frequency':stimFreq_data, 'latency_diff':(out,np.arange(len(latencies)))}
+        for x in self.state.segment.analogsignals:
+            x.__hash__ = lambda x: hash(x.name)
+            self.right_ax_data[x.name] = (np.mean(self.state.get_erp(x, self.state.event_signal),axis=1),np.arange(0, len(self.state.event_signal.times)))
         self.plot_right_axis()
 
     def setup_figure(self):
@@ -178,9 +183,9 @@ class MultiTraceView(QMainWindow):
         if self.state.analog_signal is None:
             return
 
-        self.ax_right[0].clear()
+        #self.ax_right_fig.clear()
         self.percentiles = np.percentile(
-            np.abs(self.state.analog_signal_erp), np.arange(100)
+            np.abs(self.state.get_erp()), np.arange(100)
         )
         if self.ax_track_leaf is not None:
             [x.remove() for x in self.ax_track_leaf]
@@ -192,7 +197,7 @@ class MultiTraceView(QMainWindow):
         if mode=="heatmap":
 
             self.ax_track_cmap = self.ax.imshow(
-                np.abs(self.state.analog_signal_erp),
+                np.abs(self.state.get_erp()),
                 aspect="auto",
                 cmap="gray_r",
                 clim=(self.percentiles[40], self.percentiles[95]),
@@ -202,7 +207,7 @@ class MultiTraceView(QMainWindow):
 
             p90 = self.percentiles[95] * 4
             analog_signal_erp_norm = np.clip(
-                self.state.analog_signal_erp, -p90, p90
+                self.state.get_erp(), -p90, p90
             ) / (p90 * 2)
             self.ax_track_leaf = self.ax.plot(
                 (
@@ -217,7 +222,7 @@ class MultiTraceView(QMainWindow):
         if self.points_spikegroup is not None:
             self.points_spikegroup.remove()
             self.points_spikegroup = None
-        self.view.update()
+        #self.view.update()
         self.plot_spikegroups()
         self.plot_curstim_line(self.state.stimno)
 
@@ -230,21 +235,21 @@ class MultiTraceView(QMainWindow):
         self.figcache = self.fig.canvas.copy_from_bbox(self.fig.bbox)
     
     def plot_right_axis(self):
-        for ax in self.ax_right[1:]:
+        for ax in self.ax_right:
             ax.remove()
-            self.ax_right = [self.ax_right[0]]
+        self.ax_right = []
+        gs00 = matplotlib.gridspec.GridSpecFromSubplotSpec(1, len(self.right_ax_data.keys()), subplot_spec=self.gs[0,1])
         # plot right axes
-        colorwheel = iter(["r","g","b","orange","purple","green"])
-        
+        colorwheel = itertools.cycle(iter(["r","g","b","orange","purple","green"]))
+        #self.fig.subfigures()
         for i, (label,data) in enumerate(self.right_ax_data.items()):
-            if i>0:
-                newax = self.ax_right[0].twiny()
-                self.ax_right.append(newax)
+            self.ax_right.append(self.fig.add_subplot(gs00[0,i],sharey=self.ax))
+            self.ax_right[i].set_yticks([])
             c = next(colorwheel)    
-            self.ax_right[-1].plot(*data, label=label, color=c)
-            self.ax_right[-1].set_xlabel(label)
-            self.ax_right[-1].xaxis.label.set_color(c)
-            self.ax_right[-1].tick_params(axis='y', colors=c)
+            self.ax_right[i].plot(*data, label=label, color=c)
+            self.ax_right[i].set_xlabel(label)
+            self.ax_right[i].xaxis.label.set_color(c)
+            self.ax_right[i].tick_params(axis='y', colors=c)
         for ax in self.ax_right:
             try:
                 ax.redraw_in_frame()
@@ -317,8 +322,11 @@ class MultiTraceView(QMainWindow):
 
         artists = plot(self.state.cur_spike_group, color="red")
         self.points_spikegroups.append(artists)
-        #self.ax.redraw_in_frame()
-        self.view.update()
+        try:
+            self.ax.redraw_in_frame()
+        except:
+            pass
+        self.view.draw_idle()
 
     def plot_curstim_line(self, stimNo=None):
         if stimNo is None:
@@ -330,12 +338,14 @@ class MultiTraceView(QMainWindow):
             self.hline.set_ydata(stimNo)
          
         #self.ax.redraw_in_frame()
-        self.view.update()
+        self.view.draw_idle()
+        #self.view.update()
 
     def updateAll(self):
-        if self.mode!="heatmap":
+        if self.mode!="heatmap" or self.ax_track_cmap is None:
             pass
         else:
+            
             self.ax_track_cmap.set_clim(
                 self.percentiles[self.lowerSpinBox.value()],
                 self.percentiles[self.upperSpinBox.value()],
@@ -372,6 +382,8 @@ class PolygonSelectorTool:  # This is annoyingly close - there are two styles of
     def onselect(self, verts):
         print(verts)
 
+class DialogSignalSelect(QMainWindow):
+    pass
 
 if __name__ == "__main__":
 

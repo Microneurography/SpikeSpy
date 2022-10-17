@@ -47,6 +47,7 @@ class NeoSettingsView(QMainWindow):
         self.eventSignalCombo.blockSignals(True)
         self.analogSignalCombo.clear()
         self.eventSignalCombo.clear()
+        
         if seg is None:
             return
         for a in seg.analogsignals:

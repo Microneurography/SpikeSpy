@@ -4,11 +4,41 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "Python: Module",
+            "name": "Python: spikeverify + file",
             "type": "python",
             "request": "launch",
-            "module": "spikeannotator.SpikeSpy",
+            "module": "spikeannotator.mng_visualisation",
+            "justMyCode": true,
+            "args": ["data/test2.h5"]
+        },
+        {
+            "name": "Python: spikeverify",
+            "type": "python",
+            "request": "launch",
+            "module": "spikeannotator.mng_visualisation",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: SingleTraceView",
+            "type": "python",
+            "request": "launch",
+            "module": "spikeannotator.SingleTraceView",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: MultiTraceView",
+            "type": "python",
+            "request": "launch",
+            "module": "spikeannotator.MultiTraceView",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: mng_file_selector",
+            "type": "python",
+            "request": "launch",
+            "module": "spikeannotator.mng_file_selector",
             "justMyCode": true
         }
     ]

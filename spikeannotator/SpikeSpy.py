@@ -132,7 +132,7 @@ class MdiView(QMainWindow):
                 )[0]
             if self.move_mode =="snap":
                 from scipy.signal import find_peaks
-                dpts = self.state.analog_signal_erp[self.state.stimno]
+                dpts = self.state.get_erp()[self.state.stimno]
                 pts,_ = find_peaks(dpts)
                 pts_down,_ = find_peaks(-1*dpts)
                 pts = np.sort(np.hstack([pts,pts_down]).flatten())
