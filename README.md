@@ -9,19 +9,19 @@ A gui for annotating stimulus locked electrophysiology data (microneurography)
 # 2. [Optional] install pipx - a program manager for python
 > python -m pip install pipx
  
-# 3. install spikeverify
-> pipx install git+https://github.com/Microneurography/spikeannotator
+# 3. install spikespy
+> pipx install git+https://github.com/Microneurography/SpikeSpy
 
-installed package spikeannotator 0.1.3, installed using Python 3.9.1
+installed package SpikeSpy 0.1.3, installed using Python 3.9.1
 These apps are now globally available
-    - spikeverify
+    - spikespy
 done! ✨ 🌟 ✨
 
 # (alternitively install using pip directly with "pip install")
 
-# 4. run spikeverify
+# 4. run spikespy
 
-> spikeverify
+> spikespy
 ```
 
 ## User Guide
