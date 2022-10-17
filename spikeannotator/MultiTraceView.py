@@ -35,7 +35,11 @@ class MultiTraceView(QMainWindow):
     ):
         super().__init__(parent)
         self.state: ViewerState = None
-
+        self.ax_track_cmap = None
+        self.ax_track_leaf = None
+        self.points_spikegroup = None
+        self.hline = None
+        self.figcache=None
 
         xsize = 1024
         ysize = 480
@@ -131,11 +135,7 @@ class MultiTraceView(QMainWindow):
         self.setCentralWidget(w)
 
         self.percentiles = []
-        self.ax_track_cmap = None
-        self.ax_track_leaf = None
-        self.points_spikegroup = None
-        self.hline = None
-        self.figcache=None
+
         if state is not None:
             self.set_state(state)
         self.setup_figure()
@@ -342,15 +342,16 @@ class MultiTraceView(QMainWindow):
         #self.view.update()
 
     def updateAll(self):
-        if self.mode!="heatmap":
+        if self.mode!="heatmap" or self.ax_track_cmap is None:
             pass
         else:
+            
             self.ax_track_cmap.set_clim(
                 self.percentiles[self.lowerSpinBox.value()],
                 self.percentiles[self.upperSpinBox.value()],
             )
             self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
-            #self.view.update()
+            self.view.update()
 
     def view_clicked(self, e: MouseEvent):
         if self.toolbar.mode != "" or e.button != 1:
@@ -381,6 +382,8 @@ class PolygonSelectorTool:  # This is annoyingly close - there are two styles of
     def onselect(self, verts):
         print(verts)
 
+class DialogSignalSelect(QMainWindow):
+    pass
 
 if __name__ == "__main__":
 

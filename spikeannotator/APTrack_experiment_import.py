@@ -1,4 +1,5 @@
 # Code to load data generated using APTrack into neo
+# ensure works with 04/04 data
 
 import json
 import logging
@@ -42,7 +43,6 @@ def readHeader(f):
             header[item.split(" = ")[0]] = item.split(" = ")[1]
     return header
 
-
 def readContinous(filename):
     NUM_HEADER_BYTES = 1024
     openephysdtype = np.dtype(
@@ -58,7 +58,6 @@ def readContinous(filename):
     mmap = np.memmap(filename, mode="r", dtype=openephysdtype, offset=NUM_HEADER_BYTES)
     return (header, mmap)
 
-
 @dataclass
 class APTrackRecording:
     filename: str
@@ -68,7 +67,7 @@ class APTrackRecording:
     summarize = None
 
 
-def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None):
+def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record_no=1):
     """
     Takes the openephys files and creates a single neo object containing the experiment data
 
@@ -84,9 +83,13 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None):
         ch_units_probe = pq.UnitQuantity(
             "kmicroVolts", pq.uV / float(header["bitVolts"]), symbol="kuV"
         )
+        if record_no is not None:
+            ch_mmap2 = ch_mmap[ch_mmap["recording"] == record_no-1]
+        else:
+            ch_mmap2 = ch_mmap
         if f.probe_type == TypeID.ANALOG:
             asig = AnalogSignal(
-                    ch_mmap['data'].flat,
+                    ch_mmap2['data'].flat,
                     sampling_rate=sampling_rate,
                     units=ch_units_probe,
                     type_id=f.probe_type.value,
@@ -107,11 +110,12 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None):
                 )
             )
         elif f.probe_type == TypeID.TTL:
+            m = np.mean(ch_mmap2["data"])
             # find events from continuous file
             idxs = find_square_pulse_numpy(
-                ch_mmap["data"].flat,
+                ch_mmap2["data"].flat,
                 int(int(header["sampleRate"]) * 0.0004),
-                (2 * np.std(ch_mmap["data"])) + np.mean(ch_mmap["data"]),
+                (0.1 * np.std(ch_mmap2["data"])) + m,
             )  # 2sd from mean
 
             idxs_rising = idxs[
@@ -138,10 +142,8 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None):
 
     if aptrack_events is not None:
         parse_APTrackEvents(aptrack_events)
+        seg.events+=aptrack_events
     return seg
-
-
-
 
 
 def parse_APTrackEvents(filename):
@@ -212,7 +214,7 @@ def parse_APTrackEvents(filename):
 
 
 
-def process_folder(foldername: str):
+def process_folder(foldername: str, record_no=1):
     """
     taking a given folder convert to neo using the as_neo function
 
@@ -223,18 +225,23 @@ def process_folder(foldername: str):
     ADC7 = Temperature
     ADC8 = Button
     """
-    all_files = list(Path(foldername).glob("*"))
+    all_files = list(Path(foldername).glob(f"*.continuous"))
 
     def find_channel(chname):
         channo = int(re.sub("[^\d]", "", chname))
         if chname.startswith("ADC"):
             channo += 16  # sometimes there is just the channel number for ADC
+        rex = f"_(((CH)?{channo})|({chname}))"
+        if record_no >1 :
+            rex += f"(_{record_no})?"
+        rex += ".continuous"
+
         matches = [
             x
             for x in all_files
             if len(
                 re.findall(
-                    f"_(((CH)?{channo})|({chname})(_(.*))?).continuous", str(x.name)
+                    rex, str(x.name)
                 )
             )
             == 1
@@ -255,6 +262,9 @@ def process_folder(foldername: str):
             find_channel("ADC5"), TypeID.TTL, "env.stim", "A TTL of the stimulation"
         ),
         APTrackRecording(
+            find_channel("ADC5"), TypeID.ANALOG, "env.stim", "A TTL of the stimulation"
+        ),
+        APTrackRecording(
             find_channel("ADC7"),
             TypeID.ANALOG,
             "env.thermode",
@@ -267,7 +277,7 @@ def process_folder(foldername: str):
             "Manual button press, usually to signify a change in protocol or mechanical stimulation",
         ),
     ]
-    neo = as_neo(signals)
+    neo = as_neo(signals, record_no=record_no)
 
     return neo 
 

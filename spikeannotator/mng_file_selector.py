@@ -45,8 +45,10 @@ class QNeoSelector(QWidget):
     def __init__(self, parent=None, state:ViewerState=None):
         super().__init__(parent)
         self.state = state
-        if self.state is not None:
-            self.state.onLoadNewFile.connect(self.reset)
+        if self.state is None:
+            self.state = ViewerState()
+
+        self.state.onLoadNewFile.connect(self.reset)
         self.treeView = QTreeView(self)
         self.model = QStandardItemModel(self)
         self.treeView.setModel(self.model)
@@ -168,8 +170,10 @@ class QNeoSelector(QWidget):
         self.output
         blk = neo.Block()
         from copy import deepcopy
+        if self.state.segment is None:
+            return
         seg = deepcopy(self.state.segment)
-        for i,sg in enumerate(self.state.spike_groups):
+        for i,sg in enumerate(self.state.spike_groups or []):
             sg.event.name=f"unit_{i}"
             seg.events.append(sg.event)
         blk.segments.append(seg)
