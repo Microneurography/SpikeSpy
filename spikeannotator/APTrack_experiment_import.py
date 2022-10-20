@@ -83,10 +83,13 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
         ch_units_probe = pq.UnitQuantity(
             "kmicroVolts", pq.uV / float(header["bitVolts"]), symbol="kuV"
         )
+        #header['']
         if record_no is not None:
             ch_mmap2 = ch_mmap[ch_mmap["recording"] == record_no-1]
         else:
             ch_mmap2 = ch_mmap
+
+        t_start = (ch_mmap2['timestamp'][0]/float(header["sampleRate"]))*pq.s 
         if f.probe_type == TypeID.ANALOG:
             asig = AnalogSignal(
                     ch_mmap2['data'].flat,
@@ -94,21 +97,24 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
                     units=ch_units_probe,
                     type_id=f.probe_type.value,
                     name=f.name,
-                    description= f.details
+                    description= f.details,
+                    t_start=t_start
                 )
             seg.analogsignals.append(
                 asig
             )
-            seg.analogsignals.append(
-                AnalogSignal(
-                
-                    apply_bandpass(asig,500,7000),
-                    sampling_rate=sampling_rate,
-                    type_id=f.probe_type.value,
-                    name=f.name +".bp",
-                    description= f.details + "\n bandpass 100-7000Hz"
+            if f.name.lower().startswith("rd"):
+                seg.analogsignals.append(
+                    AnalogSignal(
+                    
+                        apply_bandpass(asig,500,7000),
+                        sampling_rate=sampling_rate,
+                        type_id=f.probe_type.value,
+                        name=f.name +".bp",
+                        description= f.details + "\n bandpass 100-7000Hz",
+                        t_start=t_start
+                    )
                 )
-            )
         elif f.probe_type == TypeID.TTL:
             m = np.mean(ch_mmap2["data"])
             # find events from continuous file
@@ -123,7 +129,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             ]  # [idxs[1]==1].astype(int) # only take the rising edge
             seg.events.append(
                 Event(
-                    (idxs_rising / sampling_rate).rescale("s"),
+                    (idxs_rising / sampling_rate).rescale("s") + t_start,
                     type_id=TypeID.TTL.value,
                     name=f.name,
                     array_annotations={
@@ -132,7 +138,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
                         ).rescale("s"),
                         "maximum": (idxs[2] * ch_units_probe).rescale("mV"),
                     },
-                    description= f.details
+                    description= f.details,
                 )
             )
         elif f.probe_type == TypeID.EVENTS:
@@ -141,8 +147,15 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             raise Exception(f"Unsupported probe type '{f.probe_type}'")
 
     if aptrack_events is not None:
-        parse_APTrackEvents(aptrack_events)
-        seg.events+=aptrack_events
+        aptrack_events_arr = parse_APTrackEvents(aptrack_events)
+        spike_events = aptrack_events_arr[0]
+    
+        units = []
+        for x in np.unique(spike_events.array_annotations['spikeGroup']):
+            e = spike_events[spike_events.array_annotations['spikeGroup']==x]
+            e.name = f"unit {x}"
+            units.append(e)
+        seg.events+=units #TODO: include the protocol info
     return seg
 
 
@@ -154,7 +167,7 @@ def parse_APTrackEvents(filename):
     curProtocol = ""
     curProtocolNo = 0
     curProtocolStep = 0
-    sampleRate = 0
+    sampleRate = 30000 # TODO: this should be found... somewhere? or neo may be able to handle timestamps
     for l in f.readlines():
         l2 = l.split(" ", 1)
         if len(l2) == 1:
@@ -199,7 +212,7 @@ def parse_APTrackEvents(filename):
             array_annotations[k] = np.array(v)
 
         return Event(
-            np.array([(x[0] / sampleRate) for x in arr]) * pq.s,
+            np.array([((x[0] + x[1].get('spikeSampleLatency',0)) / sampleRate) for x in arr]) * pq.s,
             array_annotations=array_annotations,
         )
 
@@ -224,6 +237,8 @@ def process_folder(foldername: str, record_no=1):
     ADC5 = TTL
     ADC7 = Temperature
     ADC8 = Button
+
+    messages.events = APTrack spike info.
     """
     all_files = list(Path(foldername).glob(f"*.continuous"))
 
@@ -277,9 +292,11 @@ def process_folder(foldername: str, record_no=1):
             "Manual button press, usually to signify a change in protocol or mechanical stimulation",
         ),
     ]
-    neo = as_neo(signals, record_no=record_no)
+    
+    messages = Path(foldername)/"messages.events"
+    neo = as_neo(signals, str(messages) if messages.exists() else None, record_no=record_no)
 
-    return neo 
+    return neo
 
 
 from numpy.lib.stride_tricks import sliding_window_view

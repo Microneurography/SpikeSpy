@@ -92,10 +92,11 @@ class UnitView(QMainWindow):
         self.lines = {}
         # todo: move this to setup, update the current line. at the moment this causes slowdown of ui
         for i, idx, d in zip(range(len(sig_erp)), idx_arr, sig_erp):
+        
             if idx is None:
                 ydata = np.zeros(self.w * 2)
             else:
-                ydata = d[idx[0] - self.w : idx[0] + self.w]
+                ydata = d[max(idx[0] - self.w,0) : min(idx[0] + self.w,len(d))]
 
             self.lines[i] = ax.plot(
                 np.arange(-self.w, self.w), ydata, alpha=0.3, color="gray"
