@@ -106,7 +106,9 @@ class MdiView(QMainWindow):
                     
                     return
                 self.profiler.dump_stats(nom[0])
-                self.profiler = cProfile.Profile()  
+                self.profiler = cProfile.Profile() 
+                import subprocess
+                subprocess.run(["snakeviz",nom[0]]) 
                 
             else:
                 self.is_profiling=True
@@ -157,6 +159,7 @@ class MdiView(QMainWindow):
         self.shortcut_snap.activated.connect(toggle_snap)
         
 
+       
 
     def export_csv(self):
         save_filename = QFileDialog.getSaveFileName(self, "Export")[0]
