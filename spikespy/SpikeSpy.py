@@ -34,6 +34,7 @@ from .SpikeGroupTable import SpikeGroupTableView
 from .TrackingView import TrackingView
 from .UnitView import UnitView
 from .ViewerState import ViewerState, prompt_for_neo_file, tracked_neuron_unit
+from .EventView import EventView
 
 mplstyle.use('fast')
 
@@ -57,7 +58,8 @@ class MdiView(QMainWindow):
             "SingleTraceView": SingleTraceView,
             "Settings": NeoSettingsView,
             "TrackingView":TrackingView,
-            "Data": QNeoSelector
+            "Data": QNeoSelector,
+            "Events": EventView
         }
         self.cur_windows = []
 
@@ -308,7 +310,7 @@ def align_spikegroup(spikegroup, erp_arr):
 
 def run():
     app = QApplication(sys.argv)
-    icon_path = Path(sys.modules[__name__].__file__ ).parent / "icon.svg"
+    icon_path = Path(sys.modules[__name__].__file__ ).parent.joinpath("ui/icon.svg")
     app.setWindowIcon(QIcon(QPixmap(str(icon_path))))
     # data, signal_chan, event_signal, spike_groups = load_file(
     # )
