@@ -26,14 +26,15 @@ mplstyle.use("fast")
 
 
 class MultiTraceView(QMainWindow):
-
     right_ax_data = {}
     def __init__(
         self,
         parent: PySide6.QtWidgets.QWidget = None,
         state: ViewerState = None,
     ):
+        
         super().__init__(parent)
+        self.setFocusPolicy(Qt.ClickFocus)
         self.state: ViewerState = None
         self.ax_track_cmap = None
         self.ax_track_leaf = None
@@ -44,7 +45,7 @@ class MultiTraceView(QMainWindow):
         xsize = 1024
         ysize = 480
         dpi = 100
-
+    
         self.fig = Figure(figsize=(xsize / dpi, ysize / dpi), dpi=dpi)
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
 
@@ -139,7 +140,43 @@ class MultiTraceView(QMainWindow):
         if state is not None:
             self.set_state(state)
         self.setup_figure()
+        #self.pg_selector =  PolygonSelector(self.ax, self.poly_selected)
         self.update_axis()
+
+    selected_poly = None 
+    def poly_selected(self, poly):
+        self.selected_poly = poly
+        p = matplotlib.path.Path(poly)
+        extents = p.get_extents()
+        # # create selection area for the erp
+        # sample_rate = 3000 # possibly in ms
+
+        # filt = np.zeros([(int(np.floor(extents.ymax))-int(np.floor(extents.ymin)))
+        #     ,(int(np.floor(extents.xmax))-int(np.floor(extents.xmin)))*sample_rate] ) # TODO: smaple rate
+        # i = np.indices(filt.shape).transpose((1,2,0)).reshape([-1,2]) + np.array((int(np.floor(extents.xmin)),int(np.floor(extents.ymin))))
+
+        # p.contains_points(i)
+        # a better view would be to get the path intersects for a horizontal line on each possible position
+        for y in range (int(np.floor(extents.ymin), int(np.floor(extents.ymax)))):
+            p2 = matplotlib.path.Path([(extents.xmin,y),(extents.xmax,y)])
+            p.intersects_path(p2)# only returns true.. not the coordinates
+            
+
+        print(poly)
+    def keyPressEvent(self, e):
+
+        if e.key() == Qt.Key_P:
+            self.pg_selector.set_active(~self.pg_selector.active)
+            if self.pg_selector.active == 1:
+               self.pg_selector.connect_default_events()
+               self.pg_selector.set_visible(True)
+            else:
+                self.pg_selector.disconnect_events()
+                self.pg_selector.set_visible(False)
+        if e.key() == Qt.Key_Return and self.pg_selector.active:
+            pass
+            # add the new units
+        self.update()
 
     def set_state(self, state):
         self.state = state
@@ -195,7 +232,6 @@ class MultiTraceView(QMainWindow):
             self.ax_track_cmap = None
         
         if mode=="heatmap":
-
             self.ax_track_cmap = self.ax.imshow(
                 np.abs(self.state.get_erp()),
                 aspect="auto",
@@ -289,6 +325,7 @@ class MultiTraceView(QMainWindow):
         # )
         # self.ax.grid(True, which="both")
     points_spikegroups = None
+    
     def plot_spikegroups(self, sgidx=None):
         if self.points_spikegroups is None:
                 pass  # TODO optimisation of setting x_data rather than replotting

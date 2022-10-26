@@ -9,7 +9,7 @@
             "name": "Python: spikeverify + file",
             "type": "python",
             "request": "launch",
-            "module": "spikeannotator.mng_visualisation",
+            "module": "spikespy.SpikeSpy",
             "justMyCode": true,
             "args": ["data/test2.h5"]
         },
@@ -17,28 +17,35 @@
             "name": "Python: spikeverify",
             "type": "python",
             "request": "launch",
-            "module": "spikeannotator.mng_visualisation",
+            "module": "spikespy.SpikeSpy",
             "justMyCode": true
         },
         {
             "name": "Python: SingleTraceView",
             "type": "python",
             "request": "launch",
-            "module": "spikeannotator.SingleTraceView",
+            "module": "spikespy.SingleTraceView",
             "justMyCode": true
         },
         {
             "name": "Python: MultiTraceView",
             "type": "python",
             "request": "launch",
-            "module": "spikeannotator.MultiTraceView",
+            "module": "spikespy.MultiTraceView",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: EventView",
+            "type": "python",
+            "request": "launch",
+            "module": "spikespy.EventView",
             "justMyCode": true
         },
         {
             "name": "Python: mng_file_selector",
             "type": "python",
             "request": "launch",
-            "module": "spikeannotator.mng_file_selector",
+            "module": "spikespy.mng_file_selector",
             "justMyCode": true
         }
     ]

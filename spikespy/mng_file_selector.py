@@ -11,8 +11,8 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QStyledItemDelegate,
                                QTreeView, QVBoxLayout, QWidget, QHBoxLayout, QPushButton)
 import numpy as np
 
-from spikeannotator.APTrack_experiment_import import TypeID, find_square_pulse_numpy
-from spikeannotator.ViewerState import ViewerState
+from spikespy.APTrack_experiment_import import TypeID, find_square_pulse_numpy
+from spikespy.ViewerState import ViewerState
 
 
 class ComboboxDelegate(QStyledItemDelegate):

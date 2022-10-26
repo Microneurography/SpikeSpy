@@ -115,6 +115,7 @@ class ViewerState(QObject):
         self.analog_signal: neo.AnalogSignal = None
         self.sampling_rate = None
         self.event_signal: neo.Event = None
+        self.window_size = 0.5*pq.s
 
     @property
     def analog_signal_erp(self):
@@ -191,11 +192,17 @@ class ViewerState(QObject):
             p = [None for x in range(len(self.event_signal))]
             for e in sg.event.times:
                 i = int(np.searchsorted(self.event_signal, e, side="right").base) - 1
+                if i <0:
+                    continue
                 x = int(
                     ((e - self.event_signal[i]) * self.analog_signal.sampling_rate).base
                 )
-                
-                p[i] = (x, self.analog_signal[self.analog_signal.time_index(e)][0])
+                t_idx = self.analog_signal.time_index(e)
+                if (t_idx > len(self.analog_signal)):
+                    continue
+                if (e - self.event_signal[i])  > self.window_size:
+                    continue
+                p[i] = (x, self.analog_signal[t_idx][0])
 
             sg.idx_arr = p
 
@@ -203,7 +210,8 @@ class ViewerState(QObject):
         self,
         signal:neo.AnalogSignal = None,
         event_signal: neo.Event = None,
-        channel = 0
+        channel = 0,
+       
     ):
         if signal is None:
             signal = self.analog_signal
@@ -212,14 +220,14 @@ class ViewerState(QObject):
         
         signal_idx = next(i for i,x in enumerate(self.segment.analogsignals) if x.name==signal.name)
         events_idx = next(i for i,x in enumerate(self.segment.events) if x.name == event_signal.name)
-        return self._get_erp(signal_idx, events_idx, channel)
+        return self._get_erp(signal_idx, events_idx, channel, float(self.window_size.rescale(pq.second)))
 
     @lru_numpy_memmap()
-    def _get_erp(self,signal_idx=None,event_signal_idx=None, channel=0):
+    def _get_erp(self,signal_idx=None,event_signal_idx=None, channel=0, window_size = 0.5):
         signal = self.segment.analogsignals[signal_idx]
         event_signal = self.segment.events[event_signal_idx]
 
-        s = int(np.array(signal.sampling_rate.base) // 2)  # 500ms #TODO: this should be adjustable
+        s = int(np.array(signal.sampling_rate.base) // ((1/window_size)))  # 500ms #TODO: this should be adjustable
         erp = create_erp(
             signal.rescale("mV").as_array()[:, channel],
             (event_signal.as_array() - signal.t_start.base)
@@ -233,7 +241,6 @@ class ViewerState(QObject):
         self,
         analog_signal=None,
         event_signal=None,
-        other_signals=None,
         spike_groups=None,
     ):
         self._get_erp.cache_clear()
