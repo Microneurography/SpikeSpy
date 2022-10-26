@@ -3,8 +3,8 @@ from typing import Any, List, Optional, Union
 import matplotlib.style as mplstyle
 import neo
 import PySide6
-from PySide6.QtWidgets import QComboBox, QFormLayout, QMainWindow, QWidget
-
+from PySide6.QtWidgets import QComboBox, QFormLayout, QMainWindow, QWidget, QSpinBox
+import quantities as pq
 from .APTrack_experiment_import import process_folder as open_aptrack
 from .ViewerState import ViewerState
 
@@ -41,6 +41,16 @@ class NeoSettingsView(QMainWindow):
             )
         )
         self.populate_comboboxes(seg=self.state.segment)
+        self.window_size = QSpinBox()
+        
+        self.window_size.setMinimum(500)
+        self.window_size.setMaximum(2000)
+        self.window_size.setValue(int(self.state.window_size.rescale(pq.ms)))
+        self.window_size.setSuffix("ms")
+        self.window_size.setSingleStep(100)
+        self.window_size.valueChanged.connect(self.state.set_window_size)
+        
+        layout.addRow("window_size", self.window_size)
 
     def populate_comboboxes(self, seg: neo.Block):
         self.analogSignalCombo.blockSignals(True)

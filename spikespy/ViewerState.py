@@ -211,16 +211,19 @@ class ViewerState(QObject):
         signal:neo.AnalogSignal = None,
         event_signal: neo.Event = None,
         channel = 0,
+        window_size=None
        
     ):
         if signal is None:
             signal = self.analog_signal
         if event_signal is None:
             event_signal = self.event_signal
+        if window_size is None:
+            window_size = self.window_size
         
         signal_idx = next(i for i,x in enumerate(self.segment.analogsignals) if x.name==signal.name)
         events_idx = next(i for i,x in enumerate(self.segment.events) if x.name == event_signal.name)
-        return self._get_erp(signal_idx, events_idx, channel, float(self.window_size.rescale(pq.second)))
+        return self._get_erp(signal_idx, events_idx, channel, float(window_size.rescale(pq.second)))
 
     @lru_numpy_memmap()
     def _get_erp(self,signal_idx=None,event_signal_idx=None, channel=0, window_size = 0.5):
@@ -236,6 +239,11 @@ class ViewerState(QObject):
             s,
         )
         return erp
+        
+    def set_window_size(self, window_size):
+        self.window_size=window_size * pq.ms
+        self._get_erp.cache_clear()
+        self.onLoadNewFile.emit()
 
     def set_data(
         self,
