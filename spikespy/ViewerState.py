@@ -1,9 +1,10 @@
+import logging
+import sys
+import tempfile
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-import sys
-from dataclasses import dataclass, field
 from tempfile import tempdir
-import tempfile
 from turtle import update
 from typing import Any, List, Optional, Union
 
@@ -13,10 +14,11 @@ import quantities as pq
 from neo import Event
 from neo.io import NixIO
 from PySide6.QtCore import QObject, Qt, Signal, Slot
-from PySide6.QtWidgets import ( QFileDialog,QInputDialog)
+from PySide6.QtWidgets import QFileDialog, QInputDialog
 
 from .APTrack_experiment_import import process_folder as open_aptrack
 from .NeoOpenEphyisIO import open_ephys_to_neo
+
 
 class lru_numpy_memmap:
     def __init__(self):
@@ -34,15 +36,21 @@ class lru_numpy_memmap:
 
         def _(*args,**kwargs):
             key = keyfunc(*args,**kwargs)
-            if key not in self.cache_dict:
-                res = func(*args, **kwargs)
-                tmpfile_loc = tempfile.mkstemp(dir = self.cache_dir)[1] + ".npy"
-                self.cache_dict[key] = tmpfile_loc
+            if key in self.cache_dict:
+                try:
+                    return np.load(self.cache_dict[key],mmap_mode="r+")
+                except:
 
-                np.save(tmpfile_loc,res)
-                del res
+                    logging.warn("cache appears to be removed")
+            
+            res = func(*args, **kwargs)
+            tmpfile_loc = tempfile.mkstemp(dir = self.cache_dir)[1] + ".npy"
+            self.cache_dict[key] = tmpfile_loc
 
-            return np.load(self.cache_dict[key],mmap_mode="r+")
+            np.save(tmpfile_loc,res)
+            del res
+
+            
             
         _.cache_clear = self.clear_cache
         return _
@@ -169,7 +177,7 @@ class ViewerState(QObject):
 
     @Slot(int)
     def setStimNo(self, stimno: int):
-        self.stimno = max(min(stimno, self.analog_signal_erp.shape[0]-1), 0)
+        self.stimno = max(min(stimno, len(self.event_signal)-1), 0)
         self.onStimNoChange.emit(self.stimno)
 
     @Slot(str, str)
@@ -372,8 +380,9 @@ def prompt_for_neo_file(type):
     return fname, type
 
 def open_matlab_to_neo(folder):
-    from scipy.io import loadmat
     from pathlib import Path
+
+    from scipy.io import loadmat
     matfiles = Path(folder).glob("*.mat")
     seg = neo.Segment()
     for m in matfiles:
