@@ -109,7 +109,7 @@ class SingleTraceView(QMainWindow):
     @Slot()
     def updateFigure(self):
         sg = self.state.getUnitGroup()
-        dpts = self.state.get_erp()[self.state.stimno]
+        dpts = self.state.get_erp()[self.state.stimno] # this should only happen once.
         pts,_ = find_peaks(dpts)
         pts_down,_ = find_peaks(-1*dpts)
         pts = np.sort(np.hstack([pts,pts_down]).flatten())

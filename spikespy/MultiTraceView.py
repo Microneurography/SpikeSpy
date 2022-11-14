@@ -44,7 +44,7 @@ class MultiTraceView(QMainWindow):
 
         xsize = 1024
         ysize = 480
-        dpi = 100
+        dpi = 80
     
         self.fig = Figure(figsize=(xsize / dpi, ysize / dpi), dpi=dpi)
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
@@ -237,7 +237,7 @@ class MultiTraceView(QMainWindow):
                 aspect="auto",
                 cmap="gray_r",
                 clim=(self.percentiles[40], self.percentiles[95]),
-                interpolation="nearest",
+                interpolation="none",
             )
         elif(mode=="lines"):
 
@@ -387,7 +387,7 @@ class MultiTraceView(QMainWindow):
                 self.percentiles[self.lowerSpinBox.value()],
                 self.percentiles[self.upperSpinBox.value()],
             )
-            self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
+            #self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
             self.view.update()
 
     def view_clicked(self, e: MouseEvent):

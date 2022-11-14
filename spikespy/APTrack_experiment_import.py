@@ -121,7 +121,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             idxs = find_square_pulse_numpy(
                 ch_mmap2["data"].flat,
                 int(int(header["sampleRate"]) * 0.0004),
-                (0.1 * np.std(ch_mmap2["data"])) + m,
+                (2 * np.std(ch_mmap2["data"])) + m,
             )  # 2sd from mean
 
             idxs_rising = idxs[
@@ -180,7 +180,7 @@ def parse_APTrackEvents(filename):
             voltage = float(message.split(":")[1])
             stimulation_volts.append([timestamp, {"voltage": voltage}])
             continue
-        elif message.find("spikeSampleLatency") >= 0:
+        elif message.find("spikeSampleNumber") >= 0:
             d = json.loads(
                 message.replace("'", '"')
             )  # TODO: fix the json encoding in the plugin
@@ -212,7 +212,7 @@ def parse_APTrackEvents(filename):
             array_annotations[k] = np.array(v)
 
         return Event(
-            np.array([((x[0] + x[1].get('spikeSampleLatency',0)) / sampleRate) for x in arr]) * pq.s,
+            np.array([((x[1].get('spikeSampleNumber',0)) / sampleRate) for x in arr]) * pq.s,
             array_annotations=array_annotations,
         )
 
@@ -242,7 +242,7 @@ def process_folder(foldername: str, record_no=1):
     """
     all_files = list(Path(foldername).glob(f"*.continuous"))
 
-    def find_channel(chname):
+    def find_channel(chname,foldername=None):
         channo = int(re.sub("[^\d]", "", chname))
         if chname.startswith("ADC"):
             channo += 16  # sometimes there is just the channel number for ADC
@@ -298,7 +298,24 @@ def process_folder(foldername: str, record_no=1):
 
     return neo
 
-
+# def process_folder2(foldername:str, chnum):
+    
+#     signals = [
+#         APTrackRecording(
+#             Path(foldername)/"101_1.continuous", TypeID.ANALOG, "rd.0", "microneurography probe"
+#         ),  # main,
+#         APTrackRecording(
+#             Path(foldername)/"101_2.continuous",
+#             TypeID.TTL,
+#             "env.stimVolt",
+#             "A TTL of the stimulation voltage",
+#         )
+#     ]
+    
+#     messages = Path(foldername)/"messages.events"
+#     neo = as_neo(signals, str(messages) if messages.exists() else None)
+#     return neo
+ 
 from numpy.lib.stride_tricks import sliding_window_view
 
 
