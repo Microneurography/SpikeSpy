@@ -147,8 +147,8 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             raise Exception(f"Unsupported probe type '{f.probe_type}'")
 
     if aptrack_events is not None:
-        aptrack_events_arr = parse_APTrackEvents(aptrack_events)
-        spike_events = aptrack_events_arr[0]
+        spike_events, stimChange_events, protocol_events = parse_APTrackEvents(aptrack_events)
+
     
         units = []
         for x in np.unique(spike_events.array_annotations['spikeGroup']):
@@ -156,6 +156,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             e.name = f"unit {x}"
             units.append(e)
         seg.events+=units #TODO: include the protocol info
+        seg.events += [stimChange_events, protocol_events]
     return seg
 
 
@@ -211,8 +212,8 @@ def parse_APTrackEvents(filename):
         for k, v in array_annotations.items():
             array_annotations[k] = np.array(v)
 
-        return Event(
-            np.array([((x[1].get('spikeSampleNumber',0)) / sampleRate) for x in arr]) * pq.s,
+        return Event( # A bit clunky - for spikeEvents this uses spikeSampleNumber, otherwise use the current timestamp
+            np.array([(((x[1].get('spikeSampleNumber',0)) or x[0])  / sampleRate) for x in arr]) * pq.s,
             array_annotations=array_annotations,
         )
 
@@ -221,7 +222,9 @@ def parse_APTrackEvents(filename):
     )  # TODO: this needs to split by spikeGroup to work in viewer
 
     evt_stimulation_volts = make_evt(stimulation_volts)
+    evt_stimulation_volts.name = "log.stimVolt"
     evt_protocolInfo = make_evt(protocolInfo)
+    evt_protocolInfo.name = "log.protocol"
 
     return [evt_spikeInfo, evt_stimulation_volts, evt_protocolInfo]
 

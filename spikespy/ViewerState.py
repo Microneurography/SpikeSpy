@@ -49,6 +49,7 @@ class lru_numpy_memmap:
 
             np.save(tmpfile_loc,res)
             del res
+            return np.load(self.cache_dict[key],mmap_mode="r+")
 
             
             
@@ -390,3 +391,6 @@ def open_matlab_to_neo(folder):
         asig = neo.AnalogSignal(mf['data'].T, pq.V, sampling_rate = mf['samplerate'][0,0] *pq.Hz, name=m.stem)
         seg.analogsignals.append(asig)
     return seg
+
+def open_smrx_to_neo(file):
+   pass 
