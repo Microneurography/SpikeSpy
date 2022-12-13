@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>331</width>
-    <height>229</height>
+    <height>260</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -25,8 +25,7 @@
      <property name="handleWidth">
       <number>7</number>
      </property>
-     <widget class="QListView" name="eventListView"/>
-     <widget class="QTextBrowser" name="eventDetailView"/>
+     <widget class="QTableView" name="eventTableView"/>
     </widget>
    </item>
    <item>

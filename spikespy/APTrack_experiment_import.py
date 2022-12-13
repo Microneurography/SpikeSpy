@@ -121,7 +121,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             idxs = find_square_pulse_numpy(
                 ch_mmap2["data"].flat,
                 int(int(header["sampleRate"]) * 0.0004),
-                (0.1 * np.std(ch_mmap2["data"])) + m,
+                (2 * np.std(ch_mmap2["data"])) + m,
             )  # 2sd from mean
 
             idxs_rising = idxs[
@@ -147,8 +147,8 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             raise Exception(f"Unsupported probe type '{f.probe_type}'")
 
     if aptrack_events is not None:
-        aptrack_events_arr = parse_APTrackEvents(aptrack_events)
-        spike_events = aptrack_events_arr[0]
+        spike_events, stimChange_events, protocol_events = parse_APTrackEvents(aptrack_events)
+
     
         units = []
         for x in np.unique(spike_events.array_annotations['spikeGroup']):
@@ -156,6 +156,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             e.name = f"unit {x}"
             units.append(e)
         seg.events+=units #TODO: include the protocol info
+        seg.events += [stimChange_events, protocol_events]
     return seg
 
 
@@ -180,7 +181,7 @@ def parse_APTrackEvents(filename):
             voltage = float(message.split(":")[1])
             stimulation_volts.append([timestamp, {"voltage": voltage}])
             continue
-        elif message.find("spikeSampleLatency") >= 0:
+        elif message.find("spikeSampleNumber") >= 0:
             d = json.loads(
                 message.replace("'", '"')
             )  # TODO: fix the json encoding in the plugin
@@ -211,8 +212,8 @@ def parse_APTrackEvents(filename):
         for k, v in array_annotations.items():
             array_annotations[k] = np.array(v)
 
-        return Event(
-            np.array([((x[0] + x[1].get('spikeSampleLatency',0)) / sampleRate) for x in arr]) * pq.s,
+        return Event( # A bit clunky - for spikeEvents this uses spikeSampleNumber, otherwise use the current timestamp
+            np.array([(((x[1].get('spikeSampleNumber',0)) or x[0])  / sampleRate) for x in arr]) * pq.s,
             array_annotations=array_annotations,
         )
 
@@ -221,7 +222,9 @@ def parse_APTrackEvents(filename):
     )  # TODO: this needs to split by spikeGroup to work in viewer
 
     evt_stimulation_volts = make_evt(stimulation_volts)
+    evt_stimulation_volts.name = "log.stimVolt"
     evt_protocolInfo = make_evt(protocolInfo)
+    evt_protocolInfo.name = "log.protocol"
 
     return [evt_spikeInfo, evt_stimulation_volts, evt_protocolInfo]
 
@@ -242,7 +245,7 @@ def process_folder(foldername: str, record_no=1):
     """
     all_files = list(Path(foldername).glob(f"*.continuous"))
 
-    def find_channel(chname):
+    def find_channel(chname,foldername=None):
         channo = int(re.sub("[^\d]", "", chname))
         if chname.startswith("ADC"):
             channo += 16  # sometimes there is just the channel number for ADC
@@ -298,7 +301,24 @@ def process_folder(foldername: str, record_no=1):
 
     return neo
 
-
+# def process_folder2(foldername:str, chnum):
+    
+#     signals = [
+#         APTrackRecording(
+#             Path(foldername)/"101_1.continuous", TypeID.ANALOG, "rd.0", "microneurography probe"
+#         ),  # main,
+#         APTrackRecording(
+#             Path(foldername)/"101_2.continuous",
+#             TypeID.TTL,
+#             "env.stimVolt",
+#             "A TTL of the stimulation voltage",
+#         )
+#     ]
+    
+#     messages = Path(foldername)/"messages.events"
+#     neo = as_neo(signals, str(messages) if messages.exists() else None)
+#     return neo
+ 
 from numpy.lib.stride_tricks import sliding_window_view
 
 

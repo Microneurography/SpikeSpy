@@ -5,7 +5,6 @@ import neo
 import PySide6
 from PySide6.QtWidgets import QComboBox, QFormLayout, QMainWindow, QWidget, QSpinBox
 import quantities as pq
-from .APTrack_experiment_import import process_folder as open_aptrack
 from .ViewerState import ViewerState
 
 mplstyle.use('fast')

@@ -118,7 +118,7 @@ class UnitView(QMainWindow):
                 self.selected_line.set_visible(False)
         else:
 
-            d = self.state.analog_signal_erp[stimno]
+            d = self.state.analog_signal_erp[stimno] # TODO: this should not be required.
             yarr = d[idx[0] - self.w : idx[0] + self.w]
 
             grayline.set_visible(True)

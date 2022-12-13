@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'EventViewrvokrI.ui'
+## Form generated from reading UI file 'EventViewxlTlhU.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.3.1
 ##
@@ -15,15 +15,15 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QComboBox, QHBoxLayout, QListView,
+from PySide6.QtWidgets import (QApplication, QComboBox, QHBoxLayout, QHeaderView,
     QPushButton, QSizePolicy, QSpacerItem, QSplitter,
-    QTextBrowser, QVBoxLayout, QWidget)
+    QTableView, QVBoxLayout, QWidget)
 
 class Ui_EventView(object):
     def setupUi(self, EventView):
         if not EventView.objectName():
             EventView.setObjectName(u"EventView")
-        EventView.resize(331, 229)
+        EventView.resize(331, 260)
         self.verticalLayout = QVBoxLayout(EventView)
         self.verticalLayout.setObjectName(u"verticalLayout")
         self.comboBox = QComboBox(EventView)
@@ -35,12 +35,9 @@ class Ui_EventView(object):
         self.splitter.setObjectName(u"splitter")
         self.splitter.setOrientation(Qt.Horizontal)
         self.splitter.setHandleWidth(7)
-        self.eventListView = QListView(self.splitter)
-        self.eventListView.setObjectName(u"eventListView")
-        self.splitter.addWidget(self.eventListView)
-        self.eventDetailView = QTextBrowser(self.splitter)
-        self.eventDetailView.setObjectName(u"eventDetailView")
-        self.splitter.addWidget(self.eventDetailView)
+        self.eventTableView = QTableView(self.splitter)
+        self.eventTableView.setObjectName(u"eventTableView")
+        self.splitter.addWidget(self.eventTableView)
 
         self.verticalLayout.addWidget(self.splitter)
 

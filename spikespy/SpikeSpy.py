@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
                                QPushButton, QSpinBox, QTableView, QVBoxLayout,
                                QWidget, QMessageBox)
 
-from .APTrack_experiment_import import process_folder as open_aptrack
 from .mng_file_selector import QNeoSelector
 from .MultiTraceView import MultiTraceView
 from .NeoSettingsView import NeoSettingsView
