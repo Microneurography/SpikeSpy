@@ -7,7 +7,7 @@ from .ui.EventView import Ui_EventView
 from .ViewerState import ViewerState
 from typing import List
 import sys
-
+import numpy as np
 
 class ListModel(QAbstractListModel):
     def __init__(self, parent=None):
@@ -66,7 +66,7 @@ class EventViewTableModel(QAbstractTableModel):
             val = self.event.array_annotations[self.keys[index.column() - 1]][
                 index.row()
             ]
-            try:
+            try: 
                 return f"{val:.2f}"
             except:
                 return val
@@ -99,6 +99,8 @@ class EventView(QtWidgets.QWidget):
         self.ui.eventTableView.setSelectionBehavior(QtWidgets.QTableView.SelectRows)
 
         self.ui.goButton.clicked.connect(self.go_clicked)
+        self.ui.deleteButton.clicked.connect(self.del_clicked)
+        self.ui.addButton.clicked.connect(self.add_clicked)
 
         self.state: ViewerState = None
         self.setState(state)
@@ -110,13 +112,19 @@ class EventView(QtWidgets.QWidget):
             return
         self.state = state
 
-        evts = state.segment.events
-        if evts is not None:
-            self.load_events(evts)
+        self.updateModel()
 
         self.evtChangeConnection = self.state.onStimNoChange.connect(
             self.onStimNoChange
         )
+        self.state.onLoadNewFile.connect(self.updateModel)
+        self.state.onUnitChange.conect(self.model.dataChanged)
+
+    def updateModel(self):
+        evts = self.state.segment.events
+        if evts is not None:
+            self.load_events(evts)
+
 
     def onStimNoChange(self):
         t = self.state.event_signal[self.state.stimno]
@@ -131,6 +139,8 @@ class EventView(QtWidgets.QWidget):
         pass
 
     def del_clicked(self):
+        idxs = self.ui.eventTableView.selectedIndexes()
+        self.state.updateUnit()
         pass
 
     def go_clicked(self):
@@ -168,7 +178,7 @@ if __name__ == "__main__":
 
     app = QApplication([])
     state = ViewerState()
-    state.loadFile(r"data/test2.h5")
+    state.loadFile(r"/Users/xs19785/Documents/Open Ephys/06-dec.h5")
 
     view = EventView(state=state)
     view.show()
