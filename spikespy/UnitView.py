@@ -6,25 +6,37 @@ import numpy as np
 import PySide6
 import quantities as pq
 from matplotlib.backend_tools import ToolToggleBase
-from matplotlib.backends.backend_qtagg import (FigureCanvas,
-                                                NavigationToolbar2QT)
+from matplotlib.backends.backend_qtagg import FigureCanvas, NavigationToolbar2QT
 from matplotlib.figure import Figure
 from matplotlib.path import Path
 from matplotlib.widgets import PolygonSelector
-from PySide6.QtCore import (QAbstractTableModel, QModelIndex, QObject, Qt,
-                            Signal, Slot)
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
-                               QComboBox, QDialog, QFileDialog, QFormLayout,
-                               QHBoxLayout, QInputDialog, QMainWindow,
-                               QMdiArea, QMdiSubWindow, QMenu, QMenuBar,
-                               QPushButton, QSpinBox, QTableView, QVBoxLayout,
-                               QWidget)
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QMainWindow,
+    QMdiArea,
+    QMdiSubWindow,
+    QMenu,
+    QMenuBar,
+    QPushButton,
+    QSpinBox,
+    QTableView,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 from .ViewerState import ViewerState
 
-mplstyle.use('fast')
-
+mplstyle.use("fast")
 
 
 class UnitView(QMainWindow):
@@ -44,7 +56,7 @@ class UnitView(QMainWindow):
 
         self.fig = Figure(figsize=(xsize / dpi, ysize / dpi), dpi=dpi)
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
- 
+
         #  create widgets
 
         self.view = FigureCanvas(self.fig)
@@ -92,15 +104,17 @@ class UnitView(QMainWindow):
         self.lines = {}
         # todo: move this to setup, update the current line. at the moment this causes slowdown of ui
         for i, idx, d in zip(range(len(sig_erp)), idx_arr, sig_erp):
-        
+
             if idx is None:
                 ydata = np.zeros(self.w * 2)
             else:
-                ydata = d[max(idx[0] - self.w,0) : min(idx[0] + self.w,len(d))]
+                ydata = d[max(idx[0] - self.w, 0) : min(idx[0] + self.w, len(d))]
 
             self.lines[i] = ax.plot(
                 np.arange(-self.w, self.w), ydata, alpha=0.3, color="gray"
-            )[0]
+            )[
+                0
+            ]  # TODO: convert to lineCollection or blit it.
             if idx is None:
                 self.lines[i].set_visible(False)
 
@@ -118,7 +132,9 @@ class UnitView(QMainWindow):
                 self.selected_line.set_visible(False)
         else:
 
-            d = self.state.analog_signal_erp[stimno] # TODO: this should not be required.
+            d = self.state.analog_signal_erp[
+                stimno
+            ]  # TODO: this should not be required.
             yarr = d[idx[0] - self.w : idx[0] + self.w]
 
             grayline.set_visible(True)
@@ -127,8 +143,8 @@ class UnitView(QMainWindow):
                 self.selected_line.set_visible(True)
                 self.selected_line.set_ydata(yarr)
 
-            #self.axes["main"].relim()
-            #self.axes["main"].autoscale_view(True, True, True)
+            # self.axes["main"].relim()
+            # self.axes["main"].autoscale_view(True, True, True)
         self.view.draw_idle()
 
     @Slot()
@@ -137,4 +153,3 @@ class UnitView(QMainWindow):
 
     def keyPressEvent(self, event: PySide6.QtGui.QKeyEvent) -> None:
         return self.parentWidget().keyPressEvent(event)
-

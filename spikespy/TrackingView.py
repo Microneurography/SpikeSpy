@@ -9,9 +9,17 @@ import PySide6
 import quantities as pq
 from matplotlib.path import Path
 from matplotlib.widgets import PolygonSelector
-from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QFormLayout,
-                               QHBoxLayout, QMainWindow, QPushButton, QSpinBox,
-                               QStyle, QWidget)
+from PySide6.QtWidgets import (
+    QApplication,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QMainWindow,
+    QPushButton,
+    QSpinBox,
+    QStyle,
+    QWidget,
+)
 
 from .basic_tracking import track_basic
 from .ViewerState import ViewerState
@@ -32,7 +40,6 @@ class TrackingView(QMainWindow):
         w = QWidget()
         w.setLayout(layout)
         self.setCentralWidget(w)
-
 
         qsb_window_size = QDoubleSpinBox(self)
         qsb_window_size.setMinimumWidth(100)
@@ -56,11 +63,13 @@ class TrackingView(QMainWindow):
             pass
         ql = QHBoxLayout()
         ql.addWidget(qsb_threshold)
-        qbut_threshold_update = QPushButton(icon=self.style().standardIcon(QStyle.SP_FileDialogContentsView))
+        qbut_threshold_update = QPushButton(
+            icon=self.style().standardIcon(QStyle.SP_FileDialogContentsView)
+        )
         qbut_threshold_update.clicked.connect(self.updateThresholdFromUnit)
         ql.addWidget(qbut_threshold_update)
 
-        layout.addRow(self.tr("Threshold (mV)"),ql)
+        layout.addRow(self.tr("Threshold (mV)"), ql)
 
         qsb_max_skip = QSpinBox(self)
         qsb_max_skip.setMaximum(10)
@@ -68,9 +77,9 @@ class TrackingView(QMainWindow):
         qsb_max_skip.setValue(1)
         self.qsb_max_skip = qsb_max_skip
         layout.addRow(self.tr("Maximum skips"), qsb_max_skip)
-        
-        #qbut_threshold_update.setFixedHeight(20)
-        #layout.addRow(qbut_threshold_update)
+
+        # qbut_threshold_update.setFixedHeight(20)
+        # layout.addRow(qbut_threshold_update)
         qbut_go = QPushButton("Track")
         layout.addRow(qbut_go)
 
@@ -109,31 +118,34 @@ class TrackingView(QMainWindow):
             starting_time=starting_time,
             window=window,
             threshold=threshold,
-            max_skip=self.qsb_max_skip.value()
+            max_skip=self.qsb_max_skip.value(),
         )
 
-        overwrite = True # TODO: different modes: overwrite, new
-        
+        overwrite = True  # TODO: different modes: overwrite, new
+
         newEvents = []
         if overwrite:
             # The search sorted returns the len(evt2) +1 if out of bounds => breaking => this weird code
-            nxt_evt2 = evt2.searchsorted(self.state.event_signal) 
+            nxt_evt2 = evt2.searchsorted(self.state.event_signal)
             nxt_old = unit_events.searchsorted(self.state.event_signal)
-            for i,(e,new,old) in enumerate(zip(self.state.event_signal,nxt_evt2,nxt_old)):
+            for i, (e, new, old) in enumerate(
+                zip(self.state.event_signal, nxt_evt2, nxt_old)
+            ):
                 time_gap = 1 * pq.s
-                if i < len(self.state.event_signal)-1:
-                    t = self.state.event_signal[i+1] - e
+                if i < len(self.state.event_signal) - 1:
+                    t = self.state.event_signal[i + 1] - e
                     time_gap = min(time_gap, t)
-                
-                
-                if (new < len(evt2) ) and (0*pq.s < (evt2[new] - e) < time_gap):
+
+                if (new < len(evt2)) and (0 * pq.s < (evt2[new] - e) < time_gap):
                     newEvents.append(evt2[new])
                     continue
 
-                if old < len(unit_events) and (0*pq.s < (unit_events[old] - e) < time_gap):
+                if old < len(unit_events) and (
+                    0 * pq.s < (unit_events[old] - e) < time_gap
+                ):
                     newEvents.append(unit_events[old])
                     continue
-            
+
         # currently this can create >1 unit per stimulation - which goes against our philosophy
         self.state.updateUnit(
             event=Event(np.array(newEvents) * pq.s)

@@ -15,15 +15,30 @@ import PySide6
 import quantities as pq
 from matplotlib.widgets import PolygonSelector
 from neo.io import NixIO
-from PySide6.QtCore import (QAbstractTableModel, QModelIndex, QObject, Qt,
-                            Signal, Slot)
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
 from PySide6.QtGui import QAction, QColor, QShortcut, QKeySequence, QIcon, QPixmap
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
-                               QComboBox, QDialog, QFileDialog, QFormLayout,
-                               QHBoxLayout, QInputDialog, QMainWindow,
-                               QMdiArea, QMdiSubWindow, QMenu, QMenuBar,
-                               QPushButton, QSpinBox, QTableView, QVBoxLayout,
-                               QWidget, QMessageBox)
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QMainWindow,
+    QMdiArea,
+    QMdiSubWindow,
+    QMenu,
+    QMenuBar,
+    QPushButton,
+    QSpinBox,
+    QTableView,
+    QVBoxLayout,
+    QWidget,
+    QMessageBox,
+)
 
 from .mng_file_selector import QNeoSelector
 from .MultiTraceView import MultiTraceView
@@ -35,7 +50,8 @@ from .UnitView import UnitView
 from .ViewerState import ViewerState, prompt_for_neo_file, tracked_neuron_unit
 from .EventView import EventView
 
-mplstyle.use('fast')
+mplstyle.use("fast")
+
 
 class MdiView(QMainWindow):
     # signals
@@ -56,9 +72,9 @@ class MdiView(QMainWindow):
             "SpikeGroupTable": SpikeGroupTableView,
             "SingleTraceView": SingleTraceView,
             "Settings": NeoSettingsView,
-            "TrackingView":TrackingView,
+            "TrackingView": TrackingView,
             "Data": QNeoSelector,
-            "Events": EventView
+            "Events": EventView,
         }
         self.cur_windows = []
 
@@ -68,7 +84,13 @@ class MdiView(QMainWindow):
         self.mdi = QMdiArea()
         self.setCentralWidget(self.mdi)
 
-        for k in ['MultiTrace','UnitView','SpikeGroupTable','SingleTraceView','TrackingView']:
+        for k in [
+            "MultiTrace",
+            "UnitView",
+            "SpikeGroupTable",
+            "SingleTraceView",
+            "TrackingView",
+        ]:
             v = self.window_options[k]
             w = v(parent=self, state=self.state)
             w = self.mdi.addSubWindow(w)
@@ -90,92 +112,98 @@ class MdiView(QMainWindow):
             QAction("Save as nixio", self, shortcut="Ctrl+S", triggered=self.save_as)
         )
         file_menu.addAction(
-            QAction("Export as csv", self, shortcut= "Ctrl+E", triggered=self.export_csv )
+            QAction("Export as csv", self, shortcut="Ctrl+E", triggered=self.export_csv)
         )
 
         # key shortcuts
         self.profiler = cProfile.Profile()
         self.is_profiling = False
-        self.shortcut_profile = QShortcut(QKeySequence(Qt.Key_F1),self)
+        self.shortcut_profile = QShortcut(QKeySequence(Qt.Key_F1), self)
+
         def profile():
             if self.is_profiling:
                 self.profiler.disable()
-                self.is_profiling=False
+                self.is_profiling = False
                 nom = QFileDialog.getSaveFileName(self, "Export profile")
                 if nom is None:
 
-                    
                     return
                 self.profiler.dump_stats(nom[0])
-                self.profiler = cProfile.Profile() 
+                self.profiler = cProfile.Profile()
                 import subprocess
-                subprocess.run(["snakeviz",nom[0]]) 
-                
-            else:
-                self.is_profiling=True
-                self.profiler.enable()
-        self.shortcut_profile.activated.connect(lambda : profile())
 
-        self.shortcut_next = QShortcut(QKeySequence(Qt.Key_Down),self)
-        self.shortcut_next.activated.connect(lambda: self.state.setStimNo(self.state.stimno + 1))
-        
+                subprocess.run(["snakeviz", nom[0]])
+
+            else:
+                self.is_profiling = True
+                self.profiler.enable()
+
+        self.shortcut_profile.activated.connect(lambda: profile())
+
+        self.shortcut_next = QShortcut(QKeySequence(Qt.Key_Down), self)
+        self.shortcut_next.activated.connect(
+            lambda: self.state.setStimNo(self.state.stimno + 1)
+        )
+
         self.shortcut_prev = QShortcut(QKeySequence(Qt.Key_Up), self)
-        self.shortcut_prev.activated.connect(lambda:self.state.setStimNo(self.state.stimno - 1))
+        self.shortcut_prev.activated.connect(
+            lambda: self.state.setStimNo(self.state.stimno - 1)
+        )
 
         self.shortcut_del = QShortcut(QKeySequence(Qt.Key_Backspace), self)
         self.shortcut_del.activated.connect(lambda: self.state.setUnit(None))
-        
-        
+
         self.move_mode = "snap"
+
         def move(dist=1):
-            cur_point =  (
-                    self.state.spike_groups[self.state.cur_spike_group].idx_arr[
-                        self.state.stimno
-                    ]
-                )[0]
-            if self.move_mode =="snap":
+            cur_point = (
+                self.state.spike_groups[self.state.cur_spike_group].idx_arr[
+                    self.state.stimno
+                ]
+            )[0]
+            if self.move_mode == "snap":
                 from scipy.signal import find_peaks
+
                 dpts = self.state.get_erp()[self.state.stimno]
-                pts,_ = find_peaks(dpts)
-                pts_down,_ = find_peaks(-1*dpts)
-                pts = np.sort(np.hstack([pts,pts_down]).flatten())
+                pts, _ = find_peaks(dpts)
+                pts_down, _ = find_peaks(-1 * dpts)
+                pts = np.sort(np.hstack([pts, pts_down]).flatten())
                 i = pts.searchsorted(cur_point)
                 if pts[i] == cur_point:
-                    dist = pts[i+dist] - cur_point
+                    dist = pts[i + dist] - cur_point
                 else:
-                    dist = pts[i+dist-1] - cur_point
+                    dist = pts[i + dist - 1] - cur_point
 
-            self.state.setUnit(
-               cur_point
-                + dist  # TODO: make method
-            )
+            self.state.setUnit(cur_point + dist)  # TODO: make method
+
         self.shortcut_left = QShortcut(QKeySequence(Qt.Key_Left), self)
-        self.shortcut_left.activated.connect(lambda:move(-1))
-      
-        self.shortcut_right = QShortcut(QKeySequence(Qt.Key_Right), self)
-        self.shortcut_right.activated.connect(lambda:move(1))
-        self.shortcut_snap = QShortcut(QKeySequence(Qt.Key_S),self)
-        def toggle_snap():
-            self.move_mode = None if self.move_mode=="snap" else "snap"
-        self.shortcut_snap.activated.connect(toggle_snap)
-        
+        self.shortcut_left.activated.connect(lambda: move(-1))
 
-       
+        self.shortcut_right = QShortcut(QKeySequence(Qt.Key_Right), self)
+        self.shortcut_right.activated.connect(lambda: move(1))
+        self.shortcut_snap = QShortcut(QKeySequence(Qt.Key_S), self)
+
+        def toggle_snap():
+            self.move_mode = None if self.move_mode == "snap" else "snap"
+
+        self.shortcut_snap.activated.connect(toggle_snap)
 
     def export_csv(self):
         save_filename = QFileDialog.getSaveFileName(self, "Export")[0]
         from csv import writer
-        with open(save_filename, 'w') as f:
+
+        with open(save_filename, "w") as f:
             w = writer(f)
-            w.writerow(['SpikeID','Stimulus_number','Latency (ms)','Timestamp(ms)']) 
+            w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
             for i, sg in enumerate(self.state.spike_groups):
                 for timestamp in sg.event:
-                    stim_no = self.state.event_signal.searchsorted(timestamp)-1
-                    latency = (timestamp - self.state.event_signal[stim_no]).rescale(pq.ms)
-                    w.writerow([f'{i}', stim_no, latency.base, timestamp.rescale(pq.ms).base ])
-
-        
-
+                    stim_no = self.state.event_signal.searchsorted(timestamp) - 1
+                    latency = (timestamp - self.state.event_signal[stim_no]).rescale(
+                        pq.ms
+                    )
+                    w.writerow(
+                        [f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
+                    )
 
     def newWindow(self, k):
         w = self.window_options[k](parent=self, state=self.state)
@@ -188,7 +216,7 @@ class MdiView(QMainWindow):
         """
         triggered on file->open
         """
-        fname,type = prompt_for_neo_file(type)
+        fname, type = prompt_for_neo_file(type)
         self.loadFile.emit(fname, type)
 
     @Slot()
@@ -260,9 +288,8 @@ def save_file(
         for x in [*data2.analogsignals, *data2.events, data2]:
             if "nix_name" in x.annotations:
                 del x.annotations["nix_name"]
-        
+
         data2.analogsignals = [x.rescale("mV") for x in data2.analogsignals]
-        
 
         # remove previous unit annotations
         data2.events = [x for x in data2.events if not x.name.startswith("unit_")]
@@ -309,7 +336,7 @@ def align_spikegroup(spikegroup, erp_arr):
 
 def run():
     app = QApplication(sys.argv)
-    icon_path = Path(sys.modules[__name__].__file__ ).parent.joinpath("ui/icon.svg")
+    icon_path = Path(sys.modules[__name__].__file__).parent.joinpath("ui/icon.svg")
     app.setWindowIcon(QIcon(QPixmap(str(icon_path))))
     # data, signal_chan, event_signal, spike_groups = load_file(
     # )

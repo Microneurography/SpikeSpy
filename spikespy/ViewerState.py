@@ -24,38 +24,43 @@ class lru_numpy_memmap:
     def __init__(self):
         self.cache_dir = tempfile.gettempdir()
         self.cache_dict = {}
+
     def clear_cache(self):
-        for k,v in self.cache_dict.items():
+        for k, v in self.cache_dict.items():
             assert Path(v).parent == Path(self.cache_dir)
             Path(v).unlink()
         self.cache_dict = {}
 
-    def __call__(self, func,  keyfunc=None, ):
+    def __call__(
+        self,
+        func,
+        keyfunc=None,
+    ):
         if keyfunc is None:
-            keyfunc = lambda *args, **kwargs: ";".join([str(hash(a)) for a in args ] + [f"{k}={hash(v)}" for k,v in kwargs])
+            keyfunc = lambda *args, **kwargs: ";".join(
+                [str(hash(a)) for a in args] + [f"{k}={hash(v)}" for k, v in kwargs]
+            )
 
-        def _(*args,**kwargs):
-            key = keyfunc(*args,**kwargs)
+        def _(*args, **kwargs):
+            key = keyfunc(*args, **kwargs)
             if key in self.cache_dict:
                 try:
-                    return np.load(self.cache_dict[key],mmap_mode="r+")
+                    return np.load(self.cache_dict[key], mmap_mode="r+")
                 except:
 
                     logging.warn("cache appears to be removed")
-            
+
             res = func(*args, **kwargs)
-            tmpfile_loc = tempfile.mkstemp(dir = self.cache_dir)[1] + ".npy"
+            tmpfile_loc = tempfile.mkstemp(dir=self.cache_dir)[1] + ".npy"
             self.cache_dict[key] = tmpfile_loc
 
-            np.save(tmpfile_loc,res)
+            np.save(tmpfile_loc, res)
             del res
-            return np.load(self.cache_dict[key],mmap_mode="r+")
+            return np.load(self.cache_dict[key], mmap_mode="r+")
 
-            
-            
         _.cache_clear = self.clear_cache
         return _
-            
+
 
 @dataclass
 class tracked_neuron_unit:
@@ -91,21 +96,21 @@ class tracked_neuron_unit:
                 signal_chan.base[event_signal[i].base * signal_chan.sampling_rate.base],
             )
         return p
-    
+
     def get_latencies(self, event_signal):
         p = np.ones(len(event_signal)) * np.nan * pq.ms
         for e in self.event.times:
-            i = np.searchsorted(event_signal, e) -1
-            p[i] = (e-event_signal[i]).rescale(pq.ms)
+            i = np.searchsorted(event_signal, e) - 1
+            p[i] = (e - event_signal[i]).rescale(pq.ms)
         return p
 
-        
 
 def create_erp(signal_chan, idxs, offset=-1000, length=30000):
     arr = np.zeros((len(idxs), length))
     for i, x in enumerate(idxs):
         arr[i].flat[:] = signal_chan[int(x + offset) : int(x + offset + length)]
     return arr
+
 
 class ViewerState(QObject):
     onLoadNewFile = Signal()
@@ -124,7 +129,7 @@ class ViewerState(QObject):
         self.analog_signal: neo.AnalogSignal = None
         self.sampling_rate = None
         self.event_signal: neo.Event = None
-        self.window_size = 0.5*pq.s
+        self.window_size = 0.5 * pq.s
 
     @property
     def analog_signal_erp(self):
@@ -141,11 +146,10 @@ class ViewerState(QObject):
 
         if len(evt) > 0:
             to_keep = (evt < self.event_signal[self.stimno]) | (
-                (evt
-                > self.event_signal[
-                    self.stimno + 1  
-                ]
-            ) if self.stimno < len(self.event_signal)-1 else False)  # Prevent crash on final index
+                (evt > self.event_signal[self.stimno + 1])
+                if self.stimno < len(self.event_signal) - 1
+                else False
+            )  # Prevent crash on final index
             # TODO: we should remove by index, and also use purely the timestamps not idx_arr
             self.spike_groups[self.cur_spike_group].event = evt[to_keep]
             evt = evt[to_keep]
@@ -178,7 +182,7 @@ class ViewerState(QObject):
 
     @Slot(int)
     def setStimNo(self, stimno: int):
-        self.stimno = max(min(stimno, len(self.event_signal)-1), 0)
+        self.stimno = max(min(stimno, len(self.event_signal) - 1), 0)
         self.onStimNoChange.emit(self.stimno)
 
     @Slot(str, str)
@@ -196,20 +200,20 @@ class ViewerState(QObject):
 
     def update_idx_arrs(self):
         for sg in self.spike_groups:
-            #if sg.idx_arr is not None:
+            # if sg.idx_arr is not None:
             #    continue
             p = [None for x in range(len(self.event_signal))]
             for e in sg.event.times:
                 i = int(np.searchsorted(self.event_signal, e, side="right").base) - 1
-                if i <0:
+                if i < 0:
                     continue
                 x = int(
                     ((e - self.event_signal[i]) * self.analog_signal.sampling_rate).base
                 )
                 t_idx = self.analog_signal.time_index(e)
-                if (t_idx > len(self.analog_signal)):
+                if t_idx > len(self.analog_signal):
                     continue
-                if (e - self.event_signal[i])  > self.window_size:
+                if (e - self.event_signal[i]) > self.window_size:
                     continue
                 p[i] = (x, self.analog_signal[t_idx][0])
 
@@ -217,11 +221,10 @@ class ViewerState(QObject):
 
     def get_erp(
         self,
-        signal:neo.AnalogSignal = None,
+        signal: neo.AnalogSignal = None,
         event_signal: neo.Event = None,
-        channel = 0,
-        window_size=None
-       
+        channel=0,
+        window_size=None,
     ):
         if signal is None:
             signal = self.analog_signal
@@ -229,17 +232,27 @@ class ViewerState(QObject):
             event_signal = self.event_signal
         if window_size is None:
             window_size = self.window_size
-        
-        signal_idx = next(i for i,x in enumerate(self.segment.analogsignals) if x.name==signal.name)
-        events_idx = next(i for i,x in enumerate(self.segment.events) if x.name == event_signal.name)
-        return self._get_erp(signal_idx, events_idx, channel, float(window_size.rescale(pq.second)))
+
+        signal_idx = next(
+            i for i, x in enumerate(self.segment.analogsignals) if x.name == signal.name
+        )
+        events_idx = next(
+            i for i, x in enumerate(self.segment.events) if x.name == event_signal.name
+        )
+        return self._get_erp(
+            signal_idx, events_idx, channel, float(window_size.rescale(pq.second))
+        )
 
     @lru_numpy_memmap()
-    def _get_erp(self,signal_idx=None,event_signal_idx=None, channel=0, window_size = 0.5):
+    def _get_erp(
+        self, signal_idx=None, event_signal_idx=None, channel=0, window_size=0.5
+    ):
         signal = self.segment.analogsignals[signal_idx]
         event_signal = self.segment.events[event_signal_idx]
 
-        s = int(np.array(signal.sampling_rate.base) // ((1/window_size)))  # 500ms #TODO: this should be adjustable
+        s = int(
+            np.array(signal.sampling_rate.base) // ((1 / window_size))
+        )  # 500ms #TODO: this should be adjustable
         erp = create_erp(
             signal.rescale("mV").as_array()[:, channel],
             (event_signal.as_array() - signal.t_start.base)
@@ -248,9 +261,9 @@ class ViewerState(QObject):
             s,
         )
         return erp
-        
+
     def set_window_size(self, window_size):
-        self.window_size=window_size * pq.ms
+        self.window_size = window_size * pq.ms
         self._get_erp.cache_clear()
         self.onLoadNewFile.emit()
 
@@ -267,7 +280,6 @@ class ViewerState(QObject):
             self.event_signal = event_signal
         if spike_groups is not None:
             self.spike_groups = spike_groups
-            
 
         # ensure essentials are populated on state
         if self.spike_groups is None:
@@ -278,7 +290,7 @@ class ViewerState(QObject):
             event_signal = neo.Event()
 
         s = int(np.array(self.analog_signal.sampling_rate.base) // 2)  # 500ms
- 
+
         self.sampling_rate = int(np.array(self.analog_signal.sampling_rate.base))
         if len(self.spike_groups) == 0:
             self.spike_groups.append(tracked_neuron_unit(event=Event()))
@@ -291,20 +303,26 @@ class ViewerState(QObject):
             unit = self.cur_spike_group
         return self.spike_groups[unit]
 
-    def set_segment(self,data:neo.Segment):
+    def set_segment(self, data: neo.Segment):
 
         kwargs = {}
-        cur_evt= [i for i,x in enumerate(data.events) if id(x)== id(self.event_signal)]
+        cur_evt = [
+            i for i, x in enumerate(data.events) if id(x) == id(self.event_signal)
+        ]
         if len(cur_evt) == 0:
             event_signal = data.events[0]
-            kwargs['event_signal'] =event_signal
+            kwargs["event_signal"] = event_signal
         else:
             event_signal = data.events[cur_evt[0]]
 
-        cur_analogsig = [i for i,x in enumerate(data.analogsignals) if id(x)== id(self.analog_signal)]
+        cur_analogsig = [
+            i
+            for i, x in enumerate(data.analogsignals)
+            if id(x) == id(self.analog_signal)
+        ]
         if len(cur_analogsig) == 0:
             analog_signal = data.analogsignals[0]
-            kwargs['analog_signal'] = analog_signal
+            kwargs["analog_signal"] = analog_signal
         else:
             analog_signal = data.analogsignals[cur_evt[0]]
 
@@ -314,36 +332,43 @@ class ViewerState(QObject):
             if not x.name.startswith("unit"):
                 continue
 
-            spike_event_groups.append(tracked_neuron_unit(event=x)) 
-        
-        cur_sel = [i for i,x in enumerate(spike_event_groups) if id(x.event)== id(self.spike_groups[self.cur_spike_group])]
+            spike_event_groups.append(tracked_neuron_unit(event=x))
+
+        cur_sel = [
+            i
+            for i, x in enumerate(spike_event_groups)
+            if id(x.event) == id(self.spike_groups[self.cur_spike_group])
+        ]
         if len(cur_sel) == 0:
             self.cur_spike_group = 0
         else:
             self.cur_spike_group = self.cur_sel[0]
-        
+
         self.segment = data
 
         self.set_data(analog_signal, event_signal, spike_groups=spike_event_groups)
+
 
 def load_file(data_path, type="h5", **kwargs):
     if type == "h5":
         data = NixIO(data_path, mode="ro").read_block(0).segments[0]
     # elif type == "dabsys":
-        #data = import_dapsys_csv_files(data_path)[0].segments[0]
+    # data = import_dapsys_csv_files(data_path)[0].segments[0]
     elif type == "openEphys":
         data = open_ephys_to_neo(data_path)
-    
+
     elif type == "matlab":
         data = open_matlab_to_neo(data_path)
 
     elif type == "APTrack":
-        d = QInputDialog(None).getInt(None,"Record number","record number",minValue=1,step=1)
+        d = QInputDialog(None).getInt(
+            None, "Record number", "record number", minValue=1, step=1
+        )
         t = d[0] if d[1] else ""
         data = open_aptrack(data_path, t)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
-    elif type =="spike2":
+    elif type == "spike2":
         data = neo.Spike2IO(data_path)
     if len(data.events) == 0:
         event_signal = Event()
@@ -363,6 +388,7 @@ def load_file(data_path, type="h5", **kwargs):
 
     return data, signal_chan, event_signal, spike_event_groups
 
+
 def prompt_for_neo_file(type):
     if type is None:
         type = QInputDialog().getItem(
@@ -372,25 +398,33 @@ def prompt_for_neo_file(type):
             ["h5", "openEphys", "APTrack", "matlab", "spike2"],
         )[0]
 
-    if type  in ("h5","spike2"):
+    if type in ("h5", "spike2"):
         fname = QFileDialog.getOpenFileName(None, "Open")[0]
-    elif type in ("openEphys","APTrack","matlab"):
+    elif type in ("openEphys", "APTrack", "matlab"):
         fname = QFileDialog.getExistingDirectory(None, "Open OpenEphys")
     else:
         raise Exception(f"Unknown filetype: {type}")
     return fname, type
 
+
 def open_matlab_to_neo(folder):
     from pathlib import Path
 
     from scipy.io import loadmat
+
     matfiles = Path(folder).glob("*.mat")
     seg = neo.Segment()
     for m in matfiles:
         mf = loadmat(m)
-        asig = neo.AnalogSignal(mf['data'].T, pq.V, sampling_rate = mf['samplerate'][0,0] *pq.Hz, name=m.stem)
+        asig = neo.AnalogSignal(
+            mf["data"].T,
+            pq.V,
+            sampling_rate=mf["samplerate"][0, 0] * pq.Hz,
+            name=m.stem,
+        )
         seg.analogsignals.append(asig)
     return seg
 
+
 def open_smrx_to_neo(file):
-   pass 
+    pass

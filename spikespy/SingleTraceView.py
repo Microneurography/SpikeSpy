@@ -9,21 +9,35 @@ import numpy as np
 import PySide6
 import quantities as pq
 from matplotlib.backend_bases import MouseEvent
-from matplotlib.backends.backend_qtagg import (FigureCanvas,
-                                               NavigationToolbar2QT)
+from matplotlib.backends.backend_qtagg import FigureCanvas, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PySide6.QtCore import (QAbstractTableModel, QModelIndex, QObject, Qt,
-                            Signal, Slot)
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
-                               QComboBox, QDialog, QFileDialog, QFormLayout,
-                               QHBoxLayout, QInputDialog, QMainWindow,
-                               QMdiArea, QMdiSubWindow, QMenu, QMenuBar,
-                               QPushButton, QSpinBox, QTableView, QVBoxLayout,
-                               QWidget)
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QMainWindow,
+    QMdiArea,
+    QMdiSubWindow,
+    QMenu,
+    QMenuBar,
+    QPushButton,
+    QSpinBox,
+    QTableView,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .ViewerState import ViewerState
 
-mplstyle.use('fast')
+mplstyle.use("fast")
+
 
 class SingleTraceView(QMainWindow):
     def __init__(
@@ -37,7 +51,7 @@ class SingleTraceView(QMainWindow):
         xsize = 1024
         ysize = 480
         dpi = 100
-        self.closest_pos=0 # the closest inflection to the current spike
+        self.closest_pos = 0  # the closest inflection to the current spike
         self.fig = Figure(figsize=(xsize / dpi, ysize / dpi), dpi=dpi)
         #  create widgets
         self.view = FigureCanvas(self.fig)
@@ -60,7 +74,7 @@ class SingleTraceView(QMainWindow):
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
         # self.fig.canvas.mpl_connect('key_press_event', self.keyPressEvent)
         self.select_local_maxima_width = 1
-        self.closest_pos=0
+        self.closest_pos = 0
 
         self.setFocusPolicy(Qt.ClickFocus)
         self.setFocus()
@@ -84,7 +98,9 @@ class SingleTraceView(QMainWindow):
             lambda x, pos: "{0:g}".format(1000 * x / self.state.sampling_rate)
         )
         self.ax.xaxis.set_major_formatter(func_formatter)
-        loc = matplotlib.ticker.MultipleLocator(base=self.state.sampling_rate / 100) # this locator puts ticks at regular intervals
+        loc = matplotlib.ticker.MultipleLocator(
+            base=self.state.sampling_rate / 100
+        )  # this locator puts ticks at regular intervals
         self.ax.xaxis.set_major_locator(loc)
         # self.ax.set_xticks(
         #     np.arange(
@@ -109,10 +125,10 @@ class SingleTraceView(QMainWindow):
     @Slot()
     def updateFigure(self):
         sg = self.state.getUnitGroup()
-        dpts = self.state.get_erp()[self.state.stimno] # this should only happen once.
-        pts,_ = find_peaks(dpts)
-        pts_down,_ = find_peaks(-1*dpts)
-        pts = np.sort(np.hstack([pts,pts_down]).flatten())
+        dpts = self.state.get_erp()[self.state.stimno]  # this should only happen once.
+        pts, _ = find_peaks(dpts)
+        pts_down, _ = find_peaks(-1 * dpts)
+        pts = np.sort(np.hstack([pts, pts_down]).flatten())
         cur_point = sg.idx_arr[self.state.stimno]
         if self.trace_line_cache is None:
             self.trace_line_cache = self.ax.plot(dpts, color="purple")[0]
@@ -123,20 +139,19 @@ class SingleTraceView(QMainWindow):
             self.identified_spike_line.set_data(([cur_point[0], cur_point[0]], [0, 1]))
             self.identified_spike_line.set_visible(True)
             i = pts.searchsorted(cur_point[0])
-            i2 =  pts[i-1:i+1]
+            i2 = pts[i - 1 : i + 1]
             self.closest_pos = i2[np.argmin(np.abs(cur_point[0] - i2))]
 
         else:
             self.identified_spike_line.set_visible(False)
-        
-        
+
         # if self.scatter_peaks is not None:
         #     self.scatter_peaks.remove()
-        
+
         # self.scatter_peaks = self.ax.scatter(pts, dpts[pts], color="black", marker="x")
-        
+
         # self.scatter_peaks2 = self.ax.scatter(pts_down, dpts[pts_down], color="black", marker="x")
- 
+
         self.view.draw_idle()
 
     def set_cur_pos(self, x):
@@ -178,7 +193,7 @@ class SingleTraceView(QMainWindow):
                 self.state.event_signal[self.state.stimno] + (0.5 * pq.s)
             )  # find the most recent event
 
-            starting_time = unit_events[max(last_event-1,0)]
+            starting_time = unit_events[max(last_event - 1, 0)]
             window = 0.02 * pq.s
             threshold = (
                 self.state.analog_signal[
@@ -194,9 +209,9 @@ class SingleTraceView(QMainWindow):
                 window=window,
                 threshold=threshold,
             )
-            self.state.updateUnit(
-                event=unit_events.merge(evt2)
-            )
+            self.state.updateUnit(event=unit_events.merge(evt2))
+
+
 if __name__ == "__main__":
 
     app = QApplication([])
