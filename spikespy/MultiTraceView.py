@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QRadioButton,
     QButtonGroup,
+    QDialog,
+    QPushButton
 )
 
 from .NeoSettingsView import NeoSettingsView
@@ -129,6 +131,14 @@ class MultiTraceView(QMainWindow):
 
         butgrp.idToggled.connect(buttonToggled)
 
+        self.settingsButton = QPushButton("settings")
+        self.settingsDialog = DialogSignalSelect()
+        self.settingsButton.clicked.connect(lambda : self.settingsDialog.show())
+        self.rightPlots = {}
+
+
+
+
         layout2 = QHBoxLayout()
         layout2.addWidget(self.lowerSpinBox)
         layout2.addWidget(self.upperSpinBox)
@@ -137,6 +147,7 @@ class MultiTraceView(QMainWindow):
         layout2.addWidget(linesRadio)
         layout2.addWidget(heatmapRadio)
         layout2.addWidget(unitOnlyRadio)
+        layout2.addWidget(self.settingsButton)
 
         layout.addLayout(layout2)
         layout.addWidget(self.view)
@@ -230,6 +241,13 @@ class MultiTraceView(QMainWindow):
                 np.mean(self.state.get_erp(x, self.state.event_signal), axis=1),
                 np.arange(0, len(self.state.event_signal.times)),
             )
+        
+        self.rightPlots = {k:True for k,v in self.right_ax_data.items()}
+        self.settingsDialog = DialogSignalSelect(options=self.rightPlots)
+        def updateView(k,v):
+            self.rightPlots[k] = v
+            self.plot_right_axis()
+        self.settingsDialog.changeSelection.connect(updateView)
         self.plot_right_axis()
 
     def setup_figure(self):
@@ -290,13 +308,19 @@ class MultiTraceView(QMainWindow):
         for ax in self.ax_right:
             ax.remove()
         self.ax_right = []
+        count_axes = len([x for x,v in self.rightPlots.items() if v])
+        # if count_axes == 0:
+        #     self.ax.set_position([0,0,1,1])
+        # TODO: when there are no plots, increase the width of the main plot to fill.
+
         gs00 = matplotlib.gridspec.GridSpecFromSubplotSpec(
-            1, len(self.right_ax_data.keys()), subplot_spec=self.gs[0, 1]
+            1, max(count_axes,1) , subplot_spec=self.gs[0, 1]
         )
         # plot right axes
         colorwheel = itertools.cycle(iter(["r", "g", "b", "orange", "purple", "green"]))
         # self.fig.subfigures()
-        for i, (label, data) in enumerate(self.right_ax_data.items()):
+        for i, (label, data) in enumerate([(k,v) for k,v in self.right_ax_data.items() if self.rightPlots[k]]):
+            
             self.ax_right.append(self.fig.add_subplot(gs00[0, i], sharey=self.ax))
             self.ax_right[i].set_yticks([])
             c = next(colorwheel)
@@ -304,12 +328,12 @@ class MultiTraceView(QMainWindow):
             self.ax_right[i].set_xlabel(label)
             self.ax_right[i].xaxis.label.set_color(c)
             self.ax_right[i].tick_params(axis="y", colors=c)
-        for ax in self.ax_right:
-            try:
-                ax.redraw_in_frame()
-            except:
-                pass
-        self.view.update()
+        # for ax in self.ax_right:
+        #     try:
+        #         ax.draw_idle()
+        #     except:
+        #         pass
+        self.view.draw_idle()
 
     def update_ylim(self, curStim):
         if self.lock_to_stim:
@@ -377,7 +401,7 @@ class MultiTraceView(QMainWindow):
                     continue
                 artists = plot(i)
                 self.points_spikegroups.append(artists)
-
+        #bg = self.
         artists = plot(self.state.cur_spike_group, color="red")
         self.points_spikegroups.append(artists)
         try:
@@ -442,14 +466,34 @@ class PolygonSelectorTool:  # This is annoyingly close - there are two styles of
         print(verts)
 
 
-class DialogSignalSelect(QMainWindow):
+class DialogSignalSelect(QDialog):
+
+    changeSelection = Signal([str,bool])
+    def __init__(self, parent=None, options={}):
+        super().__init__(parent)
+        self.initUI(options)
+
+    def initUI(self, options):
+        self.vbox = QVBoxLayout()
+        self.cboxes=[]
+        for k,v in options.items():
+            op = QCheckBox(text=k)
+            op.setChecked(v)
+            op.stateChanged.connect(lambda x,k=k: self.changeSelection.emit(k, x>0))
+
+            self.vbox.addWidget(op)
+            self.cboxes.append(op)
+
+        self.setLayout(self.vbox)
+
     pass
 
 
 if __name__ == "__main__":
-
+    
     app = QApplication([])
     state = ViewerState()
+    #view = DialogSignalSelect()
     state.loadFile(r"data/test2.h5")
 
     view = MultiTraceView(state=state)
