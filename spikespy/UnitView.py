@@ -145,7 +145,11 @@ class UnitView(QMainWindow):
 
             # self.axes["main"].relim()
             # self.axes["main"].autoscale_view(True, True, True)
-        self.view.draw_idle()
+        try:
+            self.ax.redraw_in_frame()
+            self.view.update()
+        except:
+            self.view.draw_idle()
 
     @Slot()
     def view_clicked(self, event):
