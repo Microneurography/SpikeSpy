@@ -152,7 +152,11 @@ class SingleTraceView(QMainWindow):
 
         # self.scatter_peaks2 = self.ax.scatter(pts_down, dpts[pts_down], color="black", marker="x")
 
-        self.view.draw_idle()
+        try:
+            self.ax.redraw_in_frame()
+            self.view.update()
+        except:
+            self.view.draw_idle()
 
     def set_cur_pos(self, x):
         x = round(x)

@@ -118,7 +118,7 @@ class EventView(QtWidgets.QWidget):
             self.onStimNoChange
         )
         self.state.onLoadNewFile.connect(self.updateModel)
-        self.state.onUnitChange.conect(self.model.dataChanged)
+        self.state.onUnitChange.connect(lambda x: self.model.dataChanged())
 
     def updateModel(self):
         evts = self.state.segment.events

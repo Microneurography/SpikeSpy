@@ -333,7 +333,7 @@ class MultiTraceView(QMainWindow):
         #         ax.draw_idle()
         #     except:
         #         pass
-        self.view.draw_idle()
+        self.view.draw_idle() #TODO - this slows things down as it re-renders the image plot also.
 
     def update_ylim(self, curStim):
         if self.lock_to_stim:
@@ -342,7 +342,7 @@ class MultiTraceView(QMainWindow):
             self.ax.set_ylim(curStim + w, curStim - w)
             self.view.draw_idle()
 
-    def update_axis(self):
+    def update_axis(self): # TODO: plot these data using x as the time in millis.
         if self.state is None:
             return
         if self.state.analog_signal is None:
@@ -419,9 +419,13 @@ class MultiTraceView(QMainWindow):
         else:
             self.hline.set_ydata(stimNo)
 
-        # self.ax.redraw_in_frame()
-        self.view.draw_idle()
-        # self.view.update()
+        try:
+            self.ax.redraw_in_frame()
+        except:
+            self.view.draw_idle()
+        #self.ax_track_cmap.draw()
+        #self.view.draw_idle()
+        self.view.update()
 
     @Slot()
     def updateAll(self):
