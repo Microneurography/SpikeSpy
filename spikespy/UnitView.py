@@ -68,18 +68,20 @@ class UnitView(QMainWindow):
         self.selected_line = None
         self.lines = None
         self.blit_data = None
-        
+
         def draw_evt(evt):
             self.blit()
             self.update_curstim_line(self.state.stimno)
             self.view.update()
-        self.fig.canvas.mpl_connect('draw_event',draw_evt)
+
+        self.fig.canvas.mpl_connect("draw_event", draw_evt)
 
         self.setup_figure()
+
     def blit(self):
-        #self.fig.canvas.draw()
-        self.blit_data = self.fig.canvas.copy_from_bbox(self.axes['main'].bbox)
-    
+        # self.fig.canvas.draw()
+        self.blit_data = self.fig.canvas.copy_from_bbox(self.axes["main"].bbox)
+
     def set_state(self, state):
         self.state = state
         self.state.onLoadNewFile.connect(self.updateAll)
@@ -146,7 +148,7 @@ class UnitView(QMainWindow):
         self.fig.canvas.restore_region(self.blit_data)
 
         if idx is not None:
-            self.axes['main'].draw_artist(self.selected_line)
+            self.axes["main"].draw_artist(self.selected_line)
         self.view.update()
 
     @Slot()

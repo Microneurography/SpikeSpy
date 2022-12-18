@@ -60,10 +60,12 @@ class SingleTraceView(QMainWindow):
         self.ax = self.fig.add_subplot(111)
         self.addToolBar(self.toolbar)
 
-        self.identified_spike_line = self.ax.axvline(6000, zorder=0,visible=False, animated=True)
+        self.identified_spike_line = self.ax.axvline(
+            6000, zorder=0, visible=False, animated=True
+        )
         self.trace_line_cache = None
         self.scatter_peaks = None
-        
+
         self.setCentralWidget(self.view)
 
         self.state.onLoadNewFile.connect(self.setupFigure)
@@ -80,13 +82,13 @@ class SingleTraceView(QMainWindow):
         self.setFocus()
 
         self.blit_data = None
+
         def draw_evt(evt):
             self.blit()
             self.updateFigure()
-        
-        self.fig.canvas.mpl_connect('draw_event',draw_evt)
-        self.setupFigure() 
 
+        self.fig.canvas.mpl_connect("draw_event", draw_evt)
+        self.setupFigure()
 
     @Slot()
     def view_clicked(self, e: MouseEvent):
@@ -127,7 +129,7 @@ class SingleTraceView(QMainWindow):
         if self.trace_line_cache is not None:
             self.trace_line_cache.remove()
             self.trace_line_cache = None
-        
+
         self.fig.tight_layout()
         self.view.draw_idle()
         self.updateFigure()
@@ -167,10 +169,9 @@ class SingleTraceView(QMainWindow):
             self.ax.draw_artist(self.trace_line_cache)
             self.ax.draw_artist(self.identified_spike_line)
             self.view.update()
-    
+
         except:
             pass
-        
 
     def blit(self):
         self.blit_data = self.fig.canvas.copy_from_bbox(self.ax.bbox)

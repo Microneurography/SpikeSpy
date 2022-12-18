@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QButtonGroup,
     QDialog,
-    QPushButton
+    QPushButton,
 )
 
 from .NeoSettingsView import NeoSettingsView
@@ -102,9 +102,7 @@ class MultiTraceView(QMainWindow):
         self.lock_to_stimCheckBox.stateChanged.connect(set_lock)
 
         self.includeAllUnitsCheckBox = QCheckBox("All units")
-        self.includeAllUnitsCheckBox.stateChanged.connect(
-            lambda x: self.render()
-        )
+        self.includeAllUnitsCheckBox.stateChanged.connect(lambda x: self.render())
 
         butgrp = QButtonGroup()
 
@@ -133,11 +131,8 @@ class MultiTraceView(QMainWindow):
 
         self.settingsButton = QPushButton("settings")
         self.settingsDialog = DialogSignalSelect()
-        self.settingsButton.clicked.connect(lambda : self.settingsDialog.show())
+        self.settingsButton.clicked.connect(lambda: self.settingsDialog.show())
         self.rightPlots = {}
-
-
-
 
         layout2 = QHBoxLayout()
         layout2.addWidget(self.lowerSpinBox)
@@ -164,11 +159,12 @@ class MultiTraceView(QMainWindow):
         # self.pg_selector =  PolygonSelector(self.ax, self.poly_selected)
         self.update_axis()
         self.blit()
+
         def draw_evt(evt):
             self.blit()
             self.render()
-        self.fig.canvas.mpl_connect('draw_event',draw_evt)
-        
+
+        self.fig.canvas.mpl_connect("draw_event", draw_evt)
 
     selected_poly = None
 
@@ -215,9 +211,9 @@ class MultiTraceView(QMainWindow):
 
         self.state.onStimNoChange.connect(self.update_ylim)
         self.state.onStimNoChange.connect(lambda *args: self.render())
-        
+
         self.state.onLoadNewFile.connect(self.update_axis)
-       
+
         self.state.onUnitGroupChange.connect(lambda *args: self.reset_right_axes_data())
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
@@ -250,12 +246,14 @@ class MultiTraceView(QMainWindow):
                 np.mean(self.state.get_erp(x, self.state.event_signal), axis=1),
                 np.arange(0, len(self.state.event_signal.times)),
             )
-        
-        self.rightPlots = {k:True for k,v in self.right_ax_data.items()}
+
+        self.rightPlots = {k: True for k, v in self.right_ax_data.items()}
         self.settingsDialog = DialogSignalSelect(options=self.rightPlots)
-        def updateView(k,v):
+
+        def updateView(k, v):
             self.rightPlots[k] = v
             self.plot_right_axis()
+
         self.settingsDialog.changeSelection.connect(updateView)
         self.plot_right_axis()
 
@@ -317,19 +315,21 @@ class MultiTraceView(QMainWindow):
         for ax in self.ax_right:
             ax.remove()
         self.ax_right = []
-        count_axes = len([x for x,v in self.rightPlots.items() if v])
+        count_axes = len([x for x, v in self.rightPlots.items() if v])
         # if count_axes == 0:
         #     self.ax.set_position([0,0,1,1])
         # TODO: when there are no plots, increase the width of the main plot to fill.
 
         gs00 = matplotlib.gridspec.GridSpecFromSubplotSpec(
-            1, max(count_axes,1) , subplot_spec=self.gs[0, 1]
+            1, max(count_axes, 1), subplot_spec=self.gs[0, 1]
         )
         # plot right axes
         colorwheel = itertools.cycle(iter(["r", "g", "b", "orange", "purple", "green"]))
         # self.fig.subfigures()
-        for i, (label, data) in enumerate([(k,v) for k,v in self.right_ax_data.items() if self.rightPlots[k]]):
-            
+        for i, (label, data) in enumerate(
+            [(k, v) for k, v in self.right_ax_data.items() if self.rightPlots[k]]
+        ):
+
             self.ax_right.append(self.fig.add_subplot(gs00[0, i], sharey=self.ax))
             self.ax_right[i].set_yticks([])
             c = next(colorwheel)
@@ -342,17 +342,17 @@ class MultiTraceView(QMainWindow):
         #         ax.draw_idle()
         #     except:
         #         pass
-        self.view.draw_idle() #TODO - this slows things down as it re-renders the image plot also.
+        self.view.draw_idle()  # TODO - this slows things down as it re-renders the image plot also.
 
     def update_ylim(self, curStim):
         if self.lock_to_stim:
             cur_lims = self.ax.get_ylim()
             w = max(abs(cur_lims[1] - cur_lims[0]) // 2, 2)
             self.ax.set_ylim(curStim + w, curStim - w)
-            #self.view.update()
+            # self.view.update()
             self.view.draw()
 
-    def update_axis(self): # TODO: plot these data using x as the time in millis.
+    def update_axis(self):  # TODO: plot these data using x as the time in millis.
         if self.state is None:
             return
         if self.state.analog_signal is None:
@@ -400,7 +400,7 @@ class MultiTraceView(QMainWindow):
                 [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
             )
             if len(points) == 0:
-                #self.view.draw_idle()
+                # self.view.draw_idle()
                 return
             scat = self.ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
             scat.set_animated(True)
@@ -409,26 +409,26 @@ class MultiTraceView(QMainWindow):
 
         # include other units
         from matplotlib.cm import get_cmap
+
         colors = get_cmap("Set2").colors
         if self.includeAllUnitsCheckBox.isChecked():
             for i, x in enumerate(self.state.spike_groups):
                 if i == self.state.cur_spike_group:
                     continue
-                artists = plot(i, color=colors[i%len(colors)])
+                artists = plot(i, color=colors[i % len(colors)])
                 self.points_spikegroups.append(artists)
-        #bg = self.
+        # bg = self.
         artists = plot(self.state.cur_spike_group, color="red")
         self.points_spikegroups.append(artists)
         return self.points_spikegroups
 
-
     def blit(self):
-        #self.fig.canvas.draw()
+        # self.fig.canvas.draw()
         self.blit_data = self.fig.canvas.copy_from_bbox(self.ax.bbox)
-    
+
     def render(self):
-       
-        #self.view.draw_idle()
+
+        # self.view.draw_idle()
         self.fig.canvas.restore_region(self.blit_data)
         o = self.plot_curstim_line(self.state.stimno)
         o2 = self.plot_spikegroups()
@@ -451,13 +451,12 @@ class MultiTraceView(QMainWindow):
             self.hline.set_ydata(stimNo)
 
         self.ax.draw_artist(self.hline)
-        
-        #self.view.draw_idle()
-        #self.ax_track_cmap.draw()
-        #self.view.draw_idle()
-        #self.view.update()
-        return [self.hline]
 
+        # self.view.draw_idle()
+        # self.ax_track_cmap.draw()
+        # self.view.draw_idle()
+        # self.view.update()
+        return [self.hline]
 
     @Slot()
     def updateAll(self):
@@ -504,18 +503,19 @@ class PolygonSelectorTool:  # This is annoyingly close - there are two styles of
 
 class DialogSignalSelect(QDialog):
 
-    changeSelection = Signal([str,bool])
+    changeSelection = Signal([str, bool])
+
     def __init__(self, parent=None, options={}):
         super().__init__(parent)
         self.initUI(options)
 
     def initUI(self, options):
         self.vbox = QVBoxLayout()
-        self.cboxes=[]
-        for k,v in options.items():
+        self.cboxes = []
+        for k, v in options.items():
             op = QCheckBox(text=k)
             op.setChecked(v)
-            op.stateChanged.connect(lambda x,k=k: self.changeSelection.emit(k, x>0))
+            op.stateChanged.connect(lambda x, k=k: self.changeSelection.emit(k, x > 0))
 
             self.vbox.addWidget(op)
             self.cboxes.append(op)
@@ -526,10 +526,10 @@ class DialogSignalSelect(QDialog):
 
 
 if __name__ == "__main__":
-    
+
     app = QApplication([])
     state = ViewerState()
-    #view = DialogSignalSelect()
+    # view = DialogSignalSelect()
     state.loadFile(r"data/test2.h5")
 
     view = MultiTraceView(state=state)

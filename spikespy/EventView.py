@@ -9,6 +9,7 @@ from typing import List
 import sys
 import numpy as np
 
+
 class ListModel(QAbstractListModel):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -66,7 +67,7 @@ class EventViewTableModel(QAbstractTableModel):
             val = self.event.array_annotations[self.keys[index.column() - 1]][
                 index.row()
             ]
-            try: 
+            try:
                 return f"{val:.2f}"
             except:
                 return val
@@ -124,7 +125,6 @@ class EventView(QtWidgets.QWidget):
         evts = self.state.segment.events
         if evts is not None:
             self.load_events(evts)
-
 
     def onStimNoChange(self):
         t = self.state.event_signal[self.state.stimno]
