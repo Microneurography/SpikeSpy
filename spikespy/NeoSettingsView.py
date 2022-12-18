@@ -7,7 +7,8 @@ from PySide6.QtWidgets import QComboBox, QFormLayout, QMainWindow, QWidget, QSpi
 import quantities as pq
 from .ViewerState import ViewerState
 
-mplstyle.use('fast')
+mplstyle.use("fast")
+
 
 class NeoSettingsView(QMainWindow):
     def __init__(
@@ -41,14 +42,14 @@ class NeoSettingsView(QMainWindow):
         )
         self.populate_comboboxes(seg=self.state.segment)
         self.window_size = QSpinBox()
-        
+
         self.window_size.setMinimum(500)
         self.window_size.setMaximum(2000)
         self.window_size.setValue(int(self.state.window_size.rescale(pq.ms)))
         self.window_size.setSuffix("ms")
         self.window_size.setSingleStep(100)
         self.window_size.valueChanged.connect(self.state.set_window_size)
-        
+
         layout.addRow("window_size", self.window_size)
 
     def populate_comboboxes(self, seg: neo.Block):
@@ -56,7 +57,7 @@ class NeoSettingsView(QMainWindow):
         self.eventSignalCombo.blockSignals(True)
         self.analogSignalCombo.clear()
         self.eventSignalCombo.clear()
-        
+
         if seg is None:
             return
         for a in seg.analogsignals:

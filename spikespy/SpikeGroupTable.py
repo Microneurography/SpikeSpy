@@ -1,20 +1,34 @@
-
 from typing import Any, List, Optional, Union
 
 import PySide6
 
 
-from PySide6.QtCore import (QAbstractTableModel, QModelIndex, QObject, Qt,
-                            Signal, Slot)
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
 from PySide6.QtGui import QAction, QColor
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
-                               QComboBox, QDialog, QFileDialog, QFormLayout,
-                               QHBoxLayout, QInputDialog, QMainWindow,
-                               QMdiArea, QMdiSubWindow, QMenu, QMenuBar,
-                               QPushButton, QSpinBox, QTableView, QVBoxLayout,
-                               QWidget)
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QMainWindow,
+    QMdiArea,
+    QMdiSubWindow,
+    QMenu,
+    QMenuBar,
+    QPushButton,
+    QSpinBox,
+    QTableView,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .ViewerState import ViewerState
+
 
 class SpikeGroupTableView(QWidget):
     def __init__(

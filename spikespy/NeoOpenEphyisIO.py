@@ -5,6 +5,7 @@ import quantities as pq
 
 from .APTrack_experiment_import import readContinous, readHeader
 
+
 def open_ephys_to_neo(foldername):
     """
     neo's openephys io is very slow and loads ALL channels into memory.. as floats.
@@ -13,7 +14,7 @@ def open_ephys_to_neo(foldername):
     """
     all_files = list(Path(foldername).glob("*_2.continuous"))
     all_files.sort()
-    
+
     seg = Segment()
 
     for f in all_files:
@@ -24,12 +25,10 @@ def open_ephys_to_neo(foldername):
             "kmicroVolts", pq.uV / float(header["bitVolts"]), symbol="kuV"
         )
         asig = AnalogSignal(
-                ch_mmap['data'].flat,
-                sampling_rate=sampling_rate,
-                units=ch_units_probe,
-                name=f.stem
-            )
-        seg.analogsignals.append(
-            asig
+            ch_mmap["data"].flat,
+            sampling_rate=sampling_rate,
+            units=ch_units_probe,
+            name=f.stem,
         )
-    return seg 
+        seg.analogsignals.append(asig)
+    return seg
