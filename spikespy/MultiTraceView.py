@@ -103,7 +103,7 @@ class MultiTraceView(QMainWindow):
 
         self.includeAllUnitsCheckBox = QCheckBox("All units")
         self.includeAllUnitsCheckBox.stateChanged.connect(
-            lambda x: self.plot_spikegroups()
+            lambda x: self.render()
         )
 
         butgrp = QButtonGroup()
@@ -163,6 +163,12 @@ class MultiTraceView(QMainWindow):
         self.setup_figure()
         # self.pg_selector =  PolygonSelector(self.ax, self.poly_selected)
         self.update_axis()
+        self.blit()
+        def draw_evt(evt):
+            self.blit()
+            self.render()
+        self.fig.canvas.mpl_connect('draw_event',draw_evt)
+        
 
     selected_poly = None
 
@@ -204,11 +210,14 @@ class MultiTraceView(QMainWindow):
         self.state = state
         self.state.onLoadNewFile.connect(self.reset_right_axes_data)
         self.state.onLoadNewFile.connect(self.setup_figure)
-        self.state.onUnitGroupChange.connect(self.plot_spikegroups)
-        self.state.onUnitChange.connect(lambda x: self.plot_spikegroups())
-        self.state.onStimNoChange.connect(self.plot_curstim_line)
-        self.state.onLoadNewFile.connect(self.update_axis)
+        self.state.onUnitGroupChange.connect(lambda *args: self.render())
+        self.state.onUnitChange.connect(lambda *args: self.render())
+
         self.state.onStimNoChange.connect(self.update_ylim)
+        self.state.onStimNoChange.connect(lambda *args: self.render())
+        
+        self.state.onLoadNewFile.connect(self.update_axis)
+       
         self.state.onUnitGroupChange.connect(lambda *args: self.reset_right_axes_data())
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
@@ -293,16 +302,16 @@ class MultiTraceView(QMainWindow):
         if self.points_spikegroup is not None:
             self.points_spikegroup.remove()
             self.points_spikegroup = None
-        # self.view.update()
-        self.plot_spikegroups()
-        self.plot_curstim_line(self.state.stimno)
+        self.view.update()
+        self.blit()
+        # self.plot_spikegroups()
+        # self.plot_curstim_line(self.state.stimno)
 
         self.plot_right_axis()
 
         self.fig.tight_layout()
-
-        self.view.draw_idle()
-        self.figcache = self.fig.canvas.copy_from_bbox(self.fig.bbox)
+        return [x for x in [self.ax_track_cmap, self.ax_track_leaf] if x is not None]
+        # self.view.draw_idle()
 
     def plot_right_axis(self):
         for ax in self.ax_right:
@@ -340,7 +349,8 @@ class MultiTraceView(QMainWindow):
             cur_lims = self.ax.get_ylim()
             w = max(abs(cur_lims[1] - cur_lims[0]) // 2, 2)
             self.ax.set_ylim(curStim + w, curStim - w)
-            self.view.draw_idle()
+            #self.view.update()
+            self.view.draw()
 
     def update_axis(self): # TODO: plot these data using x as the time in millis.
         if self.state is None:
@@ -390,25 +400,45 @@ class MultiTraceView(QMainWindow):
                 [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
             )
             if len(points) == 0:
-                self.view.draw_idle()
+                #self.view.draw_idle()
                 return
-            return self.ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
+            scat = self.ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
+            scat.set_animated(True)
+            self.ax.draw_artist(scat)
+            return scat
 
         # include other units
+        from matplotlib.cm import get_cmap
+        colors = get_cmap("Set2").colors
         if self.includeAllUnitsCheckBox.isChecked():
             for i, x in enumerate(self.state.spike_groups):
                 if i == self.state.cur_spike_group:
                     continue
-                artists = plot(i)
+                artists = plot(i, color=colors[i%len(colors)])
                 self.points_spikegroups.append(artists)
         #bg = self.
         artists = plot(self.state.cur_spike_group, color="red")
         self.points_spikegroups.append(artists)
-        try:
-            self.ax.redraw_in_frame()
-        except:
-            pass
-        self.view.draw_idle()
+        return self.points_spikegroups
+
+
+    def blit(self):
+        #self.fig.canvas.draw()
+        self.blit_data = self.fig.canvas.copy_from_bbox(self.ax.bbox)
+    
+    def render(self):
+       
+        #self.view.draw_idle()
+        self.fig.canvas.restore_region(self.blit_data)
+        o = self.plot_curstim_line(self.state.stimno)
+        o2 = self.plot_spikegroups()
+        self.view.update()
+        return o + o2
+        # try:
+        #     self.ax.redraw_in_frame()
+        # except:
+        #     self.fig.canvas.draw()
+        # self.view.update()
 
     def plot_curstim_line(self, stimNo=None):
         if stimNo is None:
@@ -416,16 +446,18 @@ class MultiTraceView(QMainWindow):
 
         if self.hline is None:
             self.hline = self.ax.axhline(stimNo)
+            self.hline.set_animated(True)
         else:
             self.hline.set_ydata(stimNo)
 
-        try:
-            self.ax.redraw_in_frame()
-        except:
-            self.view.draw_idle()
+        self.ax.draw_artist(self.hline)
+        
+        #self.view.draw_idle()
         #self.ax_track_cmap.draw()
         #self.view.draw_idle()
-        self.view.update()
+        #self.view.update()
+        return [self.hline]
+
 
     @Slot()
     def updateAll(self):
@@ -438,7 +470,7 @@ class MultiTraceView(QMainWindow):
                 self.percentiles[self.upperSpinBox.value()],
             )
             # self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
-            self.view.update()
+            self.view.draw_idle()
 
     def view_clicked(self, e: MouseEvent):
         if self.toolbar.mode != "" or e.button != 1:

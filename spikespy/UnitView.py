@@ -67,15 +67,26 @@ class UnitView(QMainWindow):
         self.w = None
         self.selected_line = None
         self.lines = None
-        self.setup_figure()
+        self.blit_data = None
+        
+        def draw_evt(evt):
+            self.blit()
+            self.update_curstim_line(self.state.stimno)
+            self.view.update()
+        self.fig.canvas.mpl_connect('draw_event',draw_evt)
 
+        self.setup_figure()
+    def blit(self):
+        #self.fig.canvas.draw()
+        self.blit_data = self.fig.canvas.copy_from_bbox(self.axes['main'].bbox)
+    
     def set_state(self, state):
         self.state = state
         self.state.onLoadNewFile.connect(self.updateAll)
         self.state.onStimNoChange.connect(self.update_curstim_line)
         self.state.onUnitGroupChange.connect(self.updateAll)
         # self.state.onUnitChange.connect(self.update_displayed_data)
-        self.state.onUnitChange.connect(self.update_curstim_line)
+        self.state.onUnitChange.connect(self.setup_figure)
 
     @Slot()
     def updateAll(self):
@@ -90,7 +101,7 @@ class UnitView(QMainWindow):
         ax = self.axes["main"]
         xarr = np.arange(-self.w, +self.w)
         self.selected_line = ax.plot(
-            xarr, np.zeros(len(xarr)), color="purple", zorder=10
+            xarr, np.zeros(len(xarr)), color="purple", zorder=10, animated=True
         )[0]
 
         ax = self.axes["main"]
@@ -118,7 +129,6 @@ class UnitView(QMainWindow):
             if idx is None:
                 self.lines[i].set_visible(False)
 
-        self.update_curstim_line(self.state.stimno)
         self.view.draw_idle()
 
     @Slot()
@@ -126,30 +136,18 @@ class UnitView(QMainWindow):
 
         idx = self.state.getUnitGroup().idx_arr[stimno]
         grayline = self.lines[stimno]
-        if idx is None:
-            grayline.set_visible(False)
-            if stimno == self.state.stimno:
-                self.selected_line.set_visible(False)
-        else:
 
-            d = self.state.analog_signal_erp[
-                stimno
-            ]  # TODO: this should not be required.
-            yarr = d[idx[0] - self.w : idx[0] + self.w]
+        if stimno == self.state.stimno:
+            self.selected_line.set_visible(True)
+            self.selected_line.set_ydata(grayline.get_ydata())
 
-            grayline.set_visible(True)
-            grayline.set_ydata(yarr)
-            if stimno == self.state.stimno:
-                self.selected_line.set_visible(True)
-                self.selected_line.set_ydata(yarr)
+        # self.axes["main"].relim()
+        # self.axes["main"].autoscale_view(True, True, True)
+        self.fig.canvas.restore_region(self.blit_data)
 
-            # self.axes["main"].relim()
-            # self.axes["main"].autoscale_view(True, True, True)
-        try:
-            self.ax.redraw_in_frame()
-            self.view.update()
-        except:
-            self.view.draw_idle()
+        if idx is not None:
+            self.axes['main'].draw_artist(self.selected_line)
+        self.view.update()
 
     @Slot()
     def view_clicked(self, event):
