@@ -116,7 +116,9 @@ class MdiView(QMainWindow):
         )
         edit_menu = self.menubar.addMenu("&Edit")
         edit_menu.addAction(
-            QAction("undo", self, shortcut="Ctrl+Z", triggered=lambda : self.state.undo()) 
+            QAction(
+                "undo", self, shortcut="Ctrl+Z", triggered=lambda: self.state.undo()
+            )
         )
 
         # key shortcuts
@@ -173,10 +175,11 @@ class MdiView(QMainWindow):
                 pts_down, _ = find_peaks(-1 * dpts)
                 pts = np.sort(np.hstack([pts, pts_down]).flatten())
                 i = pts.searchsorted(cur_point)
-                if pts[i] == cur_point:
-                    dist = pts[i + dist] - cur_point
-                else:
-                    dist = pts[i + dist - 1] - cur_point
+
+                if dist > 0 and pts[i] != cur_point:
+                    dist -= 1
+
+                dist = pts[i + dist] - cur_point
 
             self.state.setUnit(cur_point + dist)  # TODO: make method
 
@@ -185,6 +188,21 @@ class MdiView(QMainWindow):
 
         self.shortcut_right = QShortcut(QKeySequence(Qt.Key_Right), self)
         self.shortcut_right.activated.connect(lambda: move(1))
+
+        self.shortcut_numbers = [
+            QShortcut(QKeySequence(Qt.Key_1), self),
+            QShortcut(QKeySequence(Qt.Key_2), self),
+            QShortcut(QKeySequence(Qt.Key_3), self),
+            QShortcut(QKeySequence(Qt.Key_4), self),
+            QShortcut(QKeySequence(Qt.Key_5), self),
+            QShortcut(QKeySequence(Qt.Key_6), self),
+            QShortcut(QKeySequence(Qt.Key_7), self),
+            QShortcut(QKeySequence(Qt.Key_8), self),
+            QShortcut(QKeySequence(Qt.Key_9), self),
+        ]
+        for i, x in enumerate(self.shortcut_numbers):
+            x.activated.connect(lambda i=i: self.state.setUnitGroup(i))
+
         self.shortcut_snap = QShortcut(QKeySequence(Qt.Key_S), self)
 
         def toggle_snap():

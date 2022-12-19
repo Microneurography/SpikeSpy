@@ -151,6 +151,8 @@ class ViewerState(QObject):
 
     @Slot(int)
     def setUnitGroup(self, unitid: int):
+        if unitid > len(self.spike_groups):
+            return
         self.cur_spike_group = unitid
         self.onUnitGroupChange.emit()
 
