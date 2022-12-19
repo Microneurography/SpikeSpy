@@ -114,6 +114,10 @@ class MdiView(QMainWindow):
         file_menu.addAction(
             QAction("Export as csv", self, shortcut="Ctrl+E", triggered=self.export_csv)
         )
+        edit_menu = self.menubar.addMenu("&Edit")
+        edit_menu.addAction(
+            QAction("undo", self, shortcut="Ctrl+Z", triggered=lambda : self.state.undo()) 
+        )
 
         # key shortcuts
         self.profiler = cProfile.Profile()

@@ -130,6 +130,20 @@ class ViewerState(QObject):
         self.sampling_rate = None
         self.event_signal: neo.Event = None
         self.window_size = 0.5 * pq.s
+        self.undo_queue = []
+        self.MAX_UNDO = 10
+    
+    def save_undo(self, func):
+        self.undo_queue.append(func)
+        if len(self.undo_queue) > self.MAX_UNDO:
+            self.undo_queue.pop(0)
+
+    
+    def undo(self):
+        if len(self.undo_queue) == 0:
+            return
+        func = self.undo_queue.pop()
+        func()
 
     @property
     def analog_signal_erp(self):
@@ -144,6 +158,14 @@ class ViewerState(QObject):
     def setUnit(self, latency):
         evt = self.spike_groups[self.cur_spike_group].event
 
+        def undo(x=self.cur_spike_group, evt=self.spike_groups[self.cur_spike_group].event.copy(), stimno=self.stimno, self=self):
+            evt.sort()
+            self.spike_groups[self.cur_spike_group].event = evt
+            self.update_idx_arrs()
+            self.onUnitChange.emit(stimno) 
+            
+        self.save_undo(undo)
+        
         if len(evt) > 0:
             to_keep = (evt < self.event_signal[self.stimno]) | (
                 (evt > self.event_signal[self.stimno + 1])
@@ -175,6 +197,13 @@ class ViewerState(QObject):
 
     @Slot(Event)
     def updateUnit(self, event):
+        def undo(x=self.cur_spike_group, evt=self.spike_groups[self.cur_spike_group].event, stimno=self.stimno):
+            self.spike_groups[self.cur_spike_group].event = evt
+            self.update_idx_arrs()
+            self.onUnitChange.emit(stimno) 
+        
+        self.save_undo(undo)
+        
         self.spike_groups[self.cur_spike_group].event = event
         del self.spike_groups[self.cur_spike_group].idx_arr
         self.update_idx_arrs()
@@ -297,6 +326,7 @@ class ViewerState(QObject):
 
         self.update_idx_arrs()
         self.onLoadNewFile.emit()
+        self.undo_queue = []
 
     def getUnitGroup(self, unit=None):
         if unit is None:
