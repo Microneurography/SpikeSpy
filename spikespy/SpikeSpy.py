@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
+# import PySide6QtAds as QtAds
 from .mng_file_selector import QNeoSelector
 from .MultiTraceView import MultiTraceView
 from .NeoSettingsView import NeoSettingsView
@@ -49,6 +50,8 @@ from .TrackingView import TrackingView
 from .UnitView import UnitView
 from .ViewerState import ViewerState, prompt_for_neo_file, tracked_neuron_unit
 from .EventView import EventView
+
+import PySide6QtAds as QtAds
 
 mplstyle.use("fast")
 
@@ -80,21 +83,18 @@ class MdiView(QMainWindow):
 
         self.state = state or ViewerState(**kwargs)
         self.loadFile.connect(self.state.loadFile)
-
+        self.dock_manager = QtAds.CDockManager(self)
         self.mdi = QMdiArea()
-        self.setCentralWidget(self.mdi)
+        # self.setCentralWidget(self.mdi)
 
-        for k in [
-            "MultiTrace",
-            "UnitView",
-            "SpikeGroupTable",
-            "SingleTraceView",
-            "TrackingView",
-        ]:
-            v = self.window_options[k]
-            w = v(parent=self, state=self.state)
-            w = self.mdi.addSubWindow(w)
-            self.cur_windows.append(w)
+        # for k in [
+        #     "MultiTrace",
+        #     "UnitView",
+        #     "SpikeGroupTable",
+        #     "SingleTraceView",
+        #     "TrackingView",
+        # ]:
+        #     self.newWindow(k)
 
         self.toolbar = self.addToolBar("")
         for k in self.window_options.keys():
@@ -227,11 +227,14 @@ class MdiView(QMainWindow):
                         [f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
                     )
 
-    def newWindow(self, k):
+    def newWindow(self, k, pos=QtAds.TopDockWidgetArea):
         w = self.window_options[k](parent=self, state=self.state)
-        w = self.mdi.addSubWindow(w)
-        self.cur_windows.append(w)
-        w.show()
+        w2 = QtAds.CDockWidget(k)
+        w2.setWidget(w)
+        w2.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, True)
+        self.dock_manager.addDockWidget(QtAds.TopDockWidgetArea, w2)
+        self.cur_windows.append(w2)
+        w2.show()
 
     @Slot()
     def open(self, type=None):
