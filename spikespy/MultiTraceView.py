@@ -156,7 +156,8 @@ class MultiTraceView(QMainWindow):
         if state is not None:
             self.set_state(state)
         self.setup_figure()
-        # self.pg_selector =  PolygonSelector(self.ax, self.poly_selected)
+        self.pg_selector =  LineSelector(self.ax, lambda *args:None,props=dict(color='purple', linestyle='-', linewidth=2, alpha=0.5)) # useblit does not work (for unknown reasons)
+        self.pg_selector.set_active(False)
         self.update_axis()
         self.blit()
 
@@ -168,38 +169,43 @@ class MultiTraceView(QMainWindow):
 
     selected_poly = None
 
-    def poly_selected(self, poly):
-        self.selected_poly = poly
-        p = matplotlib.path.Path(poly)
-        extents = p.get_extents()
-        # # create selection area for the erp
-        # sample_rate = 3000 # possibly in ms
-
-        # filt = np.zeros([(int(np.floor(extents.ymax))-int(np.floor(extents.ymin)))
-        #     ,(int(np.floor(extents.xmax))-int(np.floor(extents.xmin)))*sample_rate] ) # TODO: smaple rate
-        # i = np.indices(filt.shape).transpose((1,2,0)).reshape([-1,2]) + np.array((int(np.floor(extents.xmin)),int(np.floor(extents.ymin))))
-
-        # p.contains_points(i)
-        # a better view would be to get the path intersects for a horizontal line on each possible position
-        for y in range(int(np.floor(extents.ymin), int(np.floor(extents.ymax)))):
-            p2 = matplotlib.path.Path([(extents.xmin, y), (extents.xmax, y)])
-            p.intersects_path(p2)  # only returns true.. not the coordinates
-
-        print(poly)
-
     def keyPressEvent(self, e):
 
         if e.key() == Qt.Key_P:
-            self.pg_selector.set_active(~self.pg_selector.active)
+            self.pg_selector.set_active(not self.pg_selector.active)
             if self.pg_selector.active == 1:
                 self.pg_selector.connect_default_events()
+                self.pg_selector._selection_completed=False
                 self.pg_selector.set_visible(True)
             else:
-                self.pg_selector.disconnect_events()
-                self.pg_selector.set_visible(False)
-        if e.key() == Qt.Key_Return and self.pg_selector.active:
-            pass
-            # add the new units
+                self.pg_selector._selection_completed=True
+                self.pg_selector.clear()
+                self.pg_selector._xys=[(0, 0)] # TODO: move to clear
+        if e.key() == Qt.Key_Return and self.pg_selector.active: # action when pg_selector is done. #TODO: move elsewhere
+
+            # find all the interpolated spikes
+            xys = np.array(self.pg_selector._xys[:-1])
+            window_size = 100 # window size to consider around the peak #TODO: make configurable
+
+            erp = self.state.get_erp()
+            min_peak = np.std(erp.flatten()) * 2 # 2x STD of ERP as the minimum size #TODO: make configurable
+            out = []
+            
+            for i in range(xys.shape[0]-1):
+                seg = np.array([xys[i], xys[i+1]],dtype=int)
+                seg = seg[np.argsort(seg[:,1])]
+                
+                stimpos = np.arange(seg[0,1], seg[1,1])
+                arr = np.interp(stimpos, seg[:,1], seg[:,0])
+                for x, stimno in zip(arr,stimpos):
+                    x2 = int(x-(window_size//2))
+                    vals = erp[stimno, x2:x2+window_size]
+                    x2_offset = np.argmax(np.abs(vals))
+                    out.append((x2+x2_offset, stimno, vals[x2_offset]))
+                    if np.abs(vals[x2_offset]) > min_peak:
+                        self.state.setUnit(x2 + x2_offset, stimno) #TODO: This updates the units one by one migrate to updateUnit slot
+
+
         self.update()
 
     def set_state(self, state):
@@ -253,6 +259,7 @@ class MultiTraceView(QMainWindow):
         def updateView(k, v):
             self.rightPlots[k] = v
             self.plot_right_axis()
+            self.view.update()
 
         self.settingsDialog.changeSelection.connect(updateView)
         self.plot_right_axis()
@@ -432,6 +439,7 @@ class MultiTraceView(QMainWindow):
         self.fig.canvas.restore_region(self.blit_data)
         o = self.plot_curstim_line(self.state.stimno)
         o2 = self.plot_spikegroups()
+        
         self.view.update()
         return o + o2
         # try:
@@ -478,6 +486,41 @@ class MultiTraceView(QMainWindow):
         # if e.inaxes == self.ax:
         self.state.setStimNo(round(e.ydata))
 
+class LineSelector(PolygonSelector):
+
+    def _release(self, event):
+        """Button release event handler."""
+        # Release active tool handle.
+        if self._active_handle_idx >= 0:
+            if event.button == 3:
+                self._remove_vertex(self._active_handle_idx)
+                self._draw_polygon()
+            self._active_handle_idx = -1
+
+        # Place new vertex.
+        elif (not self._selection_completed
+              and 'move_all' not in self._state
+              and 'move_vertex' not in self._state):
+            self._xys.insert(-1, (event.xdata, event.ydata))
+    def _on_key_release(self, event):
+        """Key release event handler."""
+        # Add back the pending vertex if leaving the 'move_vertex' or
+        # 'move_all' mode (by checking the released key)
+        if (not self._selection_completed
+                and
+                (event.key == self._state_modifier_keys.get('move_vertex')
+                 or event.key == self._state_modifier_keys.get('move_all'))):
+            self._xys.append((event.xdata, event.ydata))
+            self._draw_polygon()
+        # Reset the polygon if the released key is the 'clear' key.
+        elif event.key == self._state_modifier_keys.get('clear'):
+            event = self._clean_event(event)
+            self._xys = [(event.xdata, event.ydata)]
+            self._selection_completed = False
+            self._remove_box()
+            self.set_visible(True)
+    
+
 
 class PolygonSelectorTool:  # This is annoyingly close - there are two styles of tools in matplotlib, and i cannot get this one to work embedded in QT (no toolmanager)
     """Polygon selector"""
@@ -503,7 +546,7 @@ class PolygonSelectorTool:  # This is annoyingly close - there are two styles of
 
 class DialogSignalSelect(QDialog):
 
-    changeSelection = Signal([str, bool])
+    changeSelection = Signal(str, bool)
 
     def __init__(self, parent=None, options={}):
         super().__init__(parent)
