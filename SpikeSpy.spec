@@ -1,14 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 block_cipher = None
 
-
-a = Analysis(['spikespy/SpikeSpy.py'],
+binaries = collect_dynamic_libs('numpy')
+datas = collect_data_files('nixio')
+datas += collect_data_files('spikespy')
+a = Analysis(['run.py'],
              pathex=[],
-             binaries=[],
-             datas=[],
-             hiddenimports=[],
+             binaries=binaries,
+             datas=datas,
+             hiddenimports=['nixio'],
              hookspath=[],
              hooksconfig={},
              runtime_hooks=[],
@@ -26,7 +29,7 @@ exe = EXE(pyz,
           a.zipfiles,
           a.datas,  
           [],
-          name='spikespy',
+          name='SpikeSpy',
           debug=False,
           bootloader_ignore_signals=False,
           strip=False,
