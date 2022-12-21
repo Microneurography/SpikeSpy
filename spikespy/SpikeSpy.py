@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
+# import PySide6QtAds as QtAds
 from .mng_file_selector import QNeoSelector
 from .MultiTraceView import MultiTraceView
 from .NeoSettingsView import NeoSettingsView
@@ -49,6 +50,8 @@ from .TrackingView import TrackingView
 from .UnitView import UnitView
 from .ViewerState import ViewerState, prompt_for_neo_file, tracked_neuron_unit
 from .EventView import EventView
+
+import PySide6QtAds as QtAds
 
 mplstyle.use("fast")
 
@@ -77,24 +80,24 @@ class MdiView(QMainWindow):
             "Events": EventView,
         }
         self.cur_windows = []
+        import pkg_resources
 
+        version = pkg_resources.get_distribution("spikespy").version
+        self.setWindowTitle(f"SpikeSpy - {version}")
         self.state = state or ViewerState(**kwargs)
         self.loadFile.connect(self.state.loadFile)
-
+        self.dock_manager = QtAds.CDockManager(self)
         self.mdi = QMdiArea()
-        self.setCentralWidget(self.mdi)
+        # self.setCentralWidget(self.mdi)
 
-        for k in [
-            "MultiTrace",
-            "UnitView",
-            "SpikeGroupTable",
-            "SingleTraceView",
-            "TrackingView",
-        ]:
-            v = self.window_options[k]
-            w = v(parent=self, state=self.state)
-            w = self.mdi.addSubWindow(w)
-            self.cur_windows.append(w)
+        # for k in [
+        #     "MultiTrace",
+        #     "UnitView",
+        #     "SpikeGroupTable",
+        #     "SingleTraceView",
+        #     "TrackingView",
+        # ]:
+        #     self.newWindow(k)
 
         self.toolbar = self.addToolBar("")
         for k in self.window_options.keys():
@@ -113,6 +116,12 @@ class MdiView(QMainWindow):
         )
         file_menu.addAction(
             QAction("Export as csv", self, shortcut="Ctrl+E", triggered=self.export_csv)
+        )
+        edit_menu = self.menubar.addMenu("&Edit")
+        edit_menu.addAction(
+            QAction(
+                "undo", self, shortcut="Ctrl+Z", triggered=lambda: self.state.undo()
+            )
         )
 
         # key shortcuts
@@ -140,17 +149,23 @@ class MdiView(QMainWindow):
 
         self.shortcut_profile.activated.connect(lambda: profile())
 
-        self.shortcut_next = QShortcut(QKeySequence(Qt.Key_Down), self)
+        self.shortcut_next = QShortcut(
+            QKeySequence(Qt.Key_Down), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_next.activated.connect(
             lambda: self.state.setStimNo(self.state.stimno + 1)
         )
 
-        self.shortcut_prev = QShortcut(QKeySequence(Qt.Key_Up), self)
+        self.shortcut_prev = QShortcut(
+            QKeySequence(Qt.Key_Up), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_prev.activated.connect(
             lambda: self.state.setStimNo(self.state.stimno - 1)
         )
 
-        self.shortcut_del = QShortcut(QKeySequence(Qt.Key_Backspace), self)
+        self.shortcut_del = QShortcut(
+            QKeySequence(Qt.Key_Backspace), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_del.activated.connect(lambda: self.state.setUnit(None))
 
         self.move_mode = "snap"
@@ -169,24 +184,62 @@ class MdiView(QMainWindow):
                 pts_down, _ = find_peaks(-1 * dpts)
                 pts = np.sort(np.hstack([pts, pts_down]).flatten())
                 i = pts.searchsorted(cur_point)
-                if pts[i] == cur_point:
-                    dist = pts[i + dist] - cur_point
-                else:
-                    dist = pts[i + dist - 1] - cur_point
+
+                if dist > 0 and pts[i] != cur_point:
+                    dist -= 1
+
+                dist = pts[i + dist] - cur_point
 
             self.state.setUnit(cur_point + dist)  # TODO: make method
 
-        self.shortcut_left = QShortcut(QKeySequence(Qt.Key_Left), self)
+        self.shortcut_left = QShortcut(
+            QKeySequence(Qt.Key_Left), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_left.activated.connect(lambda: move(-1))
 
-        self.shortcut_right = QShortcut(QKeySequence(Qt.Key_Right), self)
+        self.shortcut_right = QShortcut(
+            QKeySequence(Qt.Key_Right), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_right.activated.connect(lambda: move(1))
-        self.shortcut_snap = QShortcut(QKeySequence(Qt.Key_S), self)
+
+        self.shortcut_numbers = [
+            QShortcut(QKeySequence(Qt.Key_1), self, context=Qt.ApplicationShortcut),
+            QShortcut(QKeySequence(Qt.Key_2), self, context=Qt.ApplicationShortcut),
+            QShortcut(QKeySequence(Qt.Key_3), self, context=Qt.ApplicationShortcut),
+            QShortcut(QKeySequence(Qt.Key_4), self, context=Qt.ApplicationShortcut),
+            QShortcut(QKeySequence(Qt.Key_5), self, context=Qt.ApplicationShortcut),
+            QShortcut(QKeySequence(Qt.Key_6), self, context=Qt.ApplicationShortcut),
+            QShortcut(QKeySequence(Qt.Key_7), self, context=Qt.ApplicationShortcut),
+            QShortcut(QKeySequence(Qt.Key_8), self, context=Qt.ApplicationShortcut),
+            QShortcut(QKeySequence(Qt.Key_9), self, context=Qt.ApplicationShortcut),
+        ]
+        for i, x in enumerate(self.shortcut_numbers):
+            x.activated.connect(lambda i=i: self.state.setUnitGroup(i))
 
         def toggle_snap():
             self.move_mode = None if self.move_mode == "snap" else "snap"
 
+        self.shortcut_snap = QShortcut(
+            QKeySequence(Qt.Key_S), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_snap.activated.connect(toggle_snap)
+
+        def copy_previous():
+            try:
+                sg = self.state.spike_groups[self.state.cur_spike_group].idx_arr
+                new_x = next(
+                    sg[x][0]
+                    for x in range(self.state.stimno - 1, -1, -1)
+                    if sg[x] is not None
+                )
+                self.state.setUnit(new_x)
+            except StopIteration:
+                pass
+
+        self.shortcut_copy_previous = QShortcut(
+            QKeySequence(Qt.Key_C), self, context=Qt.ApplicationShortcut
+        )
+        self.shortcut_copy_previous.activated.connect(copy_previous)
 
     def export_csv(self):
         save_filename = QFileDialog.getSaveFileName(self, "Export")[0]
@@ -205,11 +258,14 @@ class MdiView(QMainWindow):
                         [f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
                     )
 
-    def newWindow(self, k):
+    def newWindow(self, k, pos=QtAds.TopDockWidgetArea):
         w = self.window_options[k](parent=self, state=self.state)
-        w = self.mdi.addSubWindow(w)
-        self.cur_windows.append(w)
-        w.show()
+        w2 = QtAds.CDockWidget(k)
+        w2.setWidget(w)
+        w2.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, True)
+        self.dock_manager.addDockWidget(QtAds.NoDockWidgetArea, w2)
+        self.cur_windows.append(w2)
+        w2.show()
 
     @Slot()
     def open(self, type=None):
@@ -228,6 +284,8 @@ class MdiView(QMainWindow):
         """
         fname = QFileDialog.getSaveFileName(self, "Save as", filter=".h5")[0]
         # s = neo.Segment()
+        if fname == "":
+            return
 
         s = self.state.segment or neo.Segment()
 

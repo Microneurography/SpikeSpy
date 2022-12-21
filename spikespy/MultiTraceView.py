@@ -28,7 +28,10 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
     QPushButton,
+    QFormLayout,
+    QDoubleSpinBox,
 )
+from PySide6 import QtCore
 
 from .NeoSettingsView import NeoSettingsView
 from .ViewerState import ViewerState, tracked_neuron_unit
@@ -129,6 +132,9 @@ class MultiTraceView(QMainWindow):
 
         butgrp.idToggled.connect(buttonToggled)
 
+        self.polySelectButton = QPushButton("Selector")
+        self.polySelectButton.clicked.connect(lambda *args: self.toggle_polySelector())
+
         self.settingsButton = QPushButton("settings")
         self.settingsDialog = DialogSignalSelect()
         self.settingsButton.clicked.connect(lambda: self.settingsDialog.show())
@@ -142,6 +148,7 @@ class MultiTraceView(QMainWindow):
         layout2.addWidget(linesRadio)
         layout2.addWidget(heatmapRadio)
         layout2.addWidget(unitOnlyRadio)
+        layout2.addWidget(self.polySelectButton)
         layout2.addWidget(self.settingsButton)
 
         layout.addLayout(layout2)
@@ -156,7 +163,12 @@ class MultiTraceView(QMainWindow):
         if state is not None:
             self.set_state(state)
         self.setup_figure()
-        # self.pg_selector =  PolygonSelector(self.ax, self.poly_selected)
+        self.pg_selector = LineSelector(
+            self.ax,
+            lambda *args: None,
+            props=dict(color="purple", linestyle="-", linewidth=2, alpha=0.5),
+        )  # useblit does not work (for unknown reasons)
+        self.pg_selector.set_active(False)
         self.update_axis()
         self.blit()
 
@@ -166,40 +178,70 @@ class MultiTraceView(QMainWindow):
 
         self.fig.canvas.mpl_connect("draw_event", draw_evt)
 
-    selected_poly = None
+        self.dialogPolySelect = DialogPolySelect(self)
+        self.dialogPolySelect.onSubmit.connect(self.polySelect)
+        self.dialogPolySelect.finished.connect(
+            lambda *args: self.toggle_polySelector(False)
+        )
 
-    def poly_selected(self, poly):
-        self.selected_poly = poly
-        p = matplotlib.path.Path(poly)
-        extents = p.get_extents()
-        # # create selection area for the erp
-        # sample_rate = 3000 # possibly in ms
+    def polySelect(self):
+        """
+        create new event based on the lineSelector
+        """
+        # find all the interpolated spikes
 
-        # filt = np.zeros([(int(np.floor(extents.ymax))-int(np.floor(extents.ymin)))
-        #     ,(int(np.floor(extents.xmax))-int(np.floor(extents.xmin)))*sample_rate] ) # TODO: smaple rate
-        # i = np.indices(filt.shape).transpose((1,2,0)).reshape([-1,2]) + np.array((int(np.floor(extents.xmin)),int(np.floor(extents.ymin))))
+        window_size, min_peak = self.dialogPolySelect.getValues()
+        xys = np.array(self.pg_selector._xys[:-1])
+        window_size = int(self.state.analog_signal.sampling_rate * window_size / 1000)
 
-        # p.contains_points(i)
-        # a better view would be to get the path intersects for a horizontal line on each possible position
-        for y in range(int(np.floor(extents.ymin), int(np.floor(extents.ymax)))):
-            p2 = matplotlib.path.Path([(extents.xmin, y), (extents.xmax, y)])
-            p.intersects_path(p2)  # only returns true.. not the coordinates
+        erp = self.state.get_erp()
+        out = []
 
-        print(poly)
+        for i in range(xys.shape[0] - 1):
+            seg = np.array([xys[i], xys[i + 1]], dtype=int)
+            seg = seg[np.argsort(seg[:, 1])]
+
+            stimpos = np.arange(seg[0, 1], seg[1, 1])
+            arr = np.interp(stimpos, seg[:, 1], seg[:, 0])
+            for x, stimno in zip(arr, stimpos):
+                x2 = int(x - (window_size // 2))
+                vals = erp[stimno, x2 : x2 + window_size]
+                x2_offset = np.argmax((1 if min_peak >= 0 else -1) * (vals))
+                if (1 if min_peak >= 0 else -1) * vals[x2_offset] > abs(
+                    min_peak
+                ):  # if min_peak is negative, must be negative
+                    out.append((x2 + x2_offset, stimno, vals[x2_offset]))
+
+        out = np.array(out)
+        evt = self.state.stimno_offset_to_event(
+            out[:, 1].astype(int), out[:, 0].astype(int)
+        )
+        self.state.updateUnit(evt, merge=True)
+
+    def toggle_polySelector(self, mode=None):
+        self.pg_selector.set_active(mode or (not self.pg_selector.active))
+        if self.pg_selector.active == 1:
+            self.pg_selector.connect_default_events()
+            self.pg_selector._selection_completed = False
+            self.pg_selector.set_visible(True)
+            self.dialogPolySelect.show()
+            self.dialogPolySelect.activate()
+        else:
+            self.pg_selector._selection_completed = True
+            self.pg_selector.clear()
+            self.pg_selector._xys = [(0, 0)]  # TODO: move to clear
+            self.dialogPolySelect.hide()
 
     def keyPressEvent(self, e):
 
         if e.key() == Qt.Key_P:
-            self.pg_selector.set_active(~self.pg_selector.active)
-            if self.pg_selector.active == 1:
-                self.pg_selector.connect_default_events()
-                self.pg_selector.set_visible(True)
-            else:
-                self.pg_selector.disconnect_events()
-                self.pg_selector.set_visible(False)
-        if e.key() == Qt.Key_Return and self.pg_selector.active:
-            pass
-            # add the new units
+            self.toggle_polySelector()
+        if (
+            e.key() == Qt.Key_Return and self.pg_selector.active
+        ):  # action when pg_selector is done. #TODO: move elsewhere
+
+            self.polySelect()
+
         self.update()
 
     def set_state(self, state):
@@ -253,6 +295,7 @@ class MultiTraceView(QMainWindow):
         def updateView(k, v):
             self.rightPlots[k] = v
             self.plot_right_axis()
+            self.view.update()
 
         self.settingsDialog.changeSelection.connect(updateView)
         self.plot_right_axis()
@@ -432,6 +475,7 @@ class MultiTraceView(QMainWindow):
         self.fig.canvas.restore_region(self.blit_data)
         o = self.plot_curstim_line(self.state.stimno)
         o2 = self.plot_spikegroups()
+
         self.view.update()
         return o + o2
         # try:
@@ -479,6 +523,43 @@ class MultiTraceView(QMainWindow):
         self.state.setStimNo(round(e.ydata))
 
 
+class LineSelector(PolygonSelector):
+    def _release(self, event):
+        """Button release event handler."""
+        # Release active tool handle.
+        if self._active_handle_idx >= 0:
+            if event.button == 3:
+                self._remove_vertex(self._active_handle_idx)
+                self._draw_polygon()
+            self._active_handle_idx = -1
+
+        # Place new vertex.
+        elif (
+            not self._selection_completed
+            and "move_all" not in self._state
+            and "move_vertex" not in self._state
+        ):
+            self._xys.insert(-1, (event.xdata, event.ydata))
+
+    def _on_key_release(self, event):
+        """Key release event handler."""
+        # Add back the pending vertex if leaving the 'move_vertex' or
+        # 'move_all' mode (by checking the released key)
+        if not self._selection_completed and (
+            event.key == self._state_modifier_keys.get("move_vertex")
+            or event.key == self._state_modifier_keys.get("move_all")
+        ):
+            self._xys.append((event.xdata, event.ydata))
+            self._draw_polygon()
+        # Reset the polygon if the released key is the 'clear' key.
+        elif event.key == self._state_modifier_keys.get("clear"):
+            event = self._clean_event(event)
+            self._xys = [(event.xdata, event.ydata)]
+            self._selection_completed = False
+            self._remove_box()
+            self.set_visible(True)
+
+
 class PolygonSelectorTool:  # This is annoyingly close - there are two styles of tools in matplotlib, and i cannot get this one to work embedded in QT (no toolmanager)
     """Polygon selector"""
 
@@ -488,7 +569,7 @@ class PolygonSelectorTool:  # This is annoyingly close - there are two styles of
 
     def __init__(self, fig, *args, **kwargs):
         self.fig = fig
-        self.poly = PolygonSelector(self.fig.axes[0], self.onselect)
+        self.poly = LineSelector(self.fig.axes[0], self.onselect)
         self.poly.disconnect_events()
 
     def enable(self, *args):
@@ -503,10 +584,10 @@ class PolygonSelectorTool:  # This is annoyingly close - there are two styles of
 
 class DialogSignalSelect(QDialog):
 
-    changeSelection = Signal([str, bool])
+    changeSelection = Signal(str, bool)
 
     def __init__(self, parent=None, options={}):
-        super().__init__(parent)
+        super().__init__(parent, QtCore.Qt.Tool)
         self.initUI(options)
 
     def initUI(self, options):
@@ -522,7 +603,49 @@ class DialogSignalSelect(QDialog):
 
         self.setLayout(self.vbox)
 
-    pass
+
+class DialogPolySelect(QDialog):
+    changeSelection = Signal(float, float)
+    onSubmit = Signal(float, float)
+
+    def __init__(self, parent=None, options={}):
+        super().__init__(parent, QtCore.Qt.Tool)
+        self.initUI(options)
+
+    def initUI(self, options):
+        self.vbox = QFormLayout()
+        self.cboxes = []
+
+        self.window_size_input = QSpinBox(self)
+        self.window_size_input.setMinimum(0)
+        self.window_size_input.setMaximum(200)
+        self.window_size_input.setValue(10)
+        self.window_size_input.setSuffix("ms")
+        self.window_size_input.setBaseSize(100, 10)
+        self.window_size_input.valueChanged.connect(lambda *args: self.change())
+        self.vbox.addRow(self.tr("window size"), self.window_size_input)
+
+        self.minimumThreshold = QDoubleSpinBox(self)
+        self.minimumThreshold.valueChanged.connect(lambda *args: self.change())
+        self.minimumThreshold.setBaseSize(100, 10)
+        self.minimumThreshold.setDecimals(2)
+        self.minimumThreshold.setMinimum(-999999)
+        self.minimumThreshold.setMaximum(999999)
+        self.vbox.addRow(self.tr("minimumThreshold"), self.minimumThreshold)
+
+        self.goButton = QPushButton("track")
+        self.goButton.clicked.connect(lambda: self.onSubmit.emit(*self.getValues()))
+        self.vbox.addRow(self.goButton)
+
+        self.setLayout(self.vbox)
+
+    def change(self):
+        self.changeSelection.emit(
+            self.window_size_input.value, self.minimumThreshold.value
+        )
+
+    def getValues(self):
+        return (self.window_size_input.value(), self.minimumThreshold.value())
 
 
 if __name__ == "__main__":

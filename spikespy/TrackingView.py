@@ -44,15 +44,15 @@ class TrackingView(QMainWindow):
         qsb_window_size = QDoubleSpinBox(self)
         qsb_window_size.setMinimumWidth(100)
         qsb_window_size.setMaximum(100)
-        qsb_window_size.setDecimals(3)
-        qsb_window_size.setMinimum(0.001)
+        qsb_window_size.setDecimals(0)
+        qsb_window_size.setMinimum(0)
+        qsb_window_size.setValue(5)
         self.qsb_window_size = qsb_window_size
 
         layout.addRow(self.tr("window size (ms)"), qsb_window_size)
 
         qsb_threshold = QDoubleSpinBox(self)
         qsb_threshold.setMinimumWidth(100)
-        qsb_window_size.setDecimals(3)
         qsb_threshold.setMaximum(1000000)
         qsb_threshold.setMinimum(-1000000)
 
@@ -121,34 +121,8 @@ class TrackingView(QMainWindow):
             max_skip=self.qsb_max_skip.value(),
         )
 
-        overwrite = True  # TODO: different modes: overwrite, new
-
-        newEvents = []
-        if overwrite:
-            # The search sorted returns the len(evt2) +1 if out of bounds => breaking => this weird code
-            nxt_evt2 = evt2.searchsorted(self.state.event_signal)
-            nxt_old = unit_events.searchsorted(self.state.event_signal)
-            for i, (e, new, old) in enumerate(
-                zip(self.state.event_signal, nxt_evt2, nxt_old)
-            ):
-                time_gap = 1 * pq.s
-                if i < len(self.state.event_signal) - 1:
-                    t = self.state.event_signal[i + 1] - e
-                    time_gap = min(time_gap, t)
-
-                if (new < len(evt2)) and (0 * pq.s < (evt2[new] - e) < time_gap):
-                    newEvents.append(evt2[new])
-                    continue
-
-                if old < len(unit_events) and (
-                    0 * pq.s < (unit_events[old] - e) < time_gap
-                ):
-                    newEvents.append(unit_events[old])
-                    continue
-
-        # currently this can create >1 unit per stimulation - which goes against our philosophy
         self.state.updateUnit(
-            event=Event(np.array(newEvents) * pq.s)
+            event=evt2, merge=True
         )  # Perhaps create new units to merge later?
 
 
