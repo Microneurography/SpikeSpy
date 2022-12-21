@@ -132,13 +132,12 @@ class ViewerState(QObject):
         self.window_size = 0.5 * pq.s
         self.undo_queue = []
         self.MAX_UNDO = 10
-    
+
     def save_undo(self, func):
         self.undo_queue.append(func)
         if len(self.undo_queue) > self.MAX_UNDO:
             self.undo_queue.pop(0)
 
-    
     def undo(self):
         if len(self.undo_queue) == 0:
             return
@@ -162,14 +161,19 @@ class ViewerState(QObject):
             stimno = self.stimno
         evt = self.spike_groups[self.cur_spike_group].event
 
-        def undo(x=self.cur_spike_group, evt=self.spike_groups[self.cur_spike_group].event.copy(), stimno=self.stimno, self=self):
+        def undo(
+            x=self.cur_spike_group,
+            evt=self.spike_groups[self.cur_spike_group].event.copy(),
+            stimno=self.stimno,
+            self=self,
+        ):
             evt.sort()
             self.spike_groups[self.cur_spike_group].event = evt
             self.update_idx_arrs()
-            self.onUnitChange.emit(stimno) 
-            
+            self.onUnitChange.emit(stimno)
+
         self.save_undo(undo)
-        
+
         if len(evt) > 0:
             to_keep = (evt < self.event_signal[stimno]) | (
                 (evt > self.event_signal[stimno + 1])
@@ -200,18 +204,52 @@ class ViewerState(QObject):
         self.onUnitChange.emit(stimno)
 
     @Slot(Event)
-    def updateUnit(self, event):
-        def undo(x=self.cur_spike_group, evt=self.spike_groups[self.cur_spike_group].event, stimno=self.stimno):
+    def updateUnit(self, event, merge=False):
+        def undo(
+            x=self.cur_spike_group,
+            evt=self.spike_groups[self.cur_spike_group].event,
+            stimno=self.stimno,
+        ):
             self.spike_groups[self.cur_spike_group].event = evt
             self.update_idx_arrs()
-            self.onUnitChange.emit(stimno) 
-        
+            self.onUnitChange.emit(stimno)
+
         self.save_undo(undo)
-        
+
+        cur_evt = self.spike_groups[self.cur_spike_group].event
+        if merge:
+            # update the existing events with the new ones, removing ones within 0.5s of the other
+            time_gap = 0.5 * pq.s
+            newEvents = []
+            nxt_evt2 = event.searchsorted(self.event_signal)
+            nxt_old = cur_evt.searchsorted(self.event_signal)
+            for i, (e, new, old) in enumerate(
+                zip(self.event_signal, nxt_evt2, nxt_old)
+            ):
+
+                if i < len(self.event_signal) - 1:
+                    t = self.event_signal[i + 1] - e
+                    time_gap = min(time_gap, t)
+
+                if (new < len(event)) and (0 * pq.s < (event[new] - e) < time_gap):
+                    newEvents.append(event[new])
+                    continue
+
+                if old < len(cur_evt) and (0 * pq.s < (cur_evt[old] - e) < time_gap):
+                    newEvents.append(cur_evt[old])
+                    continue
+            event = Event(np.array(newEvents) * pq.s)
         self.spike_groups[self.cur_spike_group].event = event
         del self.spike_groups[self.cur_spike_group].idx_arr
         self.update_idx_arrs()
         self.onUnitGroupChange.emit()
+
+    def stimno_offset_to_event(self, stimno, offset):
+        """
+        convert arrays of stimno and offset to Event
+        """
+        t = self.event_signal[stimno] + (offset / self.analog_signal.sampling_rate)
+        return Event(t)
 
     @Slot(int)
     def setStimNo(self, stimno: int):
