@@ -12,7 +12,7 @@ A gui for annotating stimulus locked electrophysiology data (microneurography)
 # 3. install spikespy
 > pipx install git+https://github.com/Microneurography/SpikeSpy
 
-installed package SpikeSpy 0.1.3, installed using Python 3.9.1
+installed package SpikeSpy 0.1.8, installed using Python 3.9.1
 These apps are now globally available
     - spikespy
 done! ✨ 🌟 ✨
