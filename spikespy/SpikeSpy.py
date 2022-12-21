@@ -253,6 +253,8 @@ class MdiView(QMainWindow):
         """
         fname = QFileDialog.getSaveFileName(self, "Save as", filter=".h5")[0]
         # s = neo.Segment()
+        if fname == "":
+            return
 
         s = self.state.segment or neo.Segment()
 

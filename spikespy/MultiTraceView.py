@@ -28,7 +28,10 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
     QPushButton,
+    QFormLayout,
+    QDoubleSpinBox,
 )
+from PySide6 import QtCore
 
 from .NeoSettingsView import NeoSettingsView
 from .ViewerState import ViewerState, tracked_neuron_unit
@@ -129,6 +132,9 @@ class MultiTraceView(QMainWindow):
 
         butgrp.idToggled.connect(buttonToggled)
 
+        self.polySelectButton = QPushButton("Selector")
+        self.polySelectButton.clicked.connect(lambda *args: self.toggle_polySelector())
+
         self.settingsButton = QPushButton("settings")
         self.settingsDialog = DialogSignalSelect()
         self.settingsButton.clicked.connect(lambda: self.settingsDialog.show())
@@ -142,6 +148,7 @@ class MultiTraceView(QMainWindow):
         layout2.addWidget(linesRadio)
         layout2.addWidget(heatmapRadio)
         layout2.addWidget(unitOnlyRadio)
+        layout2.addWidget(self.polySelectButton)
         layout2.addWidget(self.settingsButton)
 
         layout.addLayout(layout2)
@@ -171,55 +178,69 @@ class MultiTraceView(QMainWindow):
 
         self.fig.canvas.mpl_connect("draw_event", draw_evt)
 
-    selected_poly = None
+        self.dialogPolySelect = DialogPolySelect(self)
+        self.dialogPolySelect.onSubmit.connect(self.polySelect)
+        self.dialogPolySelect.finished.connect(
+            lambda *args: self.toggle_polySelector(False)
+        )
+
+    def polySelect(self):
+        """
+        create new event based on the lineSelector
+        """
+        # find all the interpolated spikes
+
+        window_size, min_peak = self.dialogPolySelect.getValues()
+        xys = np.array(self.pg_selector._xys[:-1])
+        window_size = int(self.state.analog_signal.sampling_rate * window_size / 1000)
+
+        erp = self.state.get_erp()
+        out = []
+
+        for i in range(xys.shape[0] - 1):
+            seg = np.array([xys[i], xys[i + 1]], dtype=int)
+            seg = seg[np.argsort(seg[:, 1])]
+
+            stimpos = np.arange(seg[0, 1], seg[1, 1])
+            arr = np.interp(stimpos, seg[:, 1], seg[:, 0])
+            for x, stimno in zip(arr, stimpos):
+                x2 = int(x - (window_size // 2))
+                vals = erp[stimno, x2 : x2 + window_size]
+                x2_offset = np.argmax((1 if min_peak >= 0 else -1) * (vals))
+                if (1 if min_peak >= 0 else -1) * vals[x2_offset] > abs(
+                    min_peak
+                ):  # if min_peak is negative, must be negative
+                    out.append((x2 + x2_offset, stimno, vals[x2_offset]))
+
+        out = np.array(out)
+        evt = self.state.stimno_offset_to_event(
+            out[:, 1].astype(int), out[:, 0].astype(int)
+        )
+        self.state.updateUnit(evt, merge=True)
+
+    def toggle_polySelector(self, mode=None):
+        self.pg_selector.set_active(mode or (not self.pg_selector.active))
+        if self.pg_selector.active == 1:
+            self.pg_selector.connect_default_events()
+            self.pg_selector._selection_completed = False
+            self.pg_selector.set_visible(True)
+            self.dialogPolySelect.show()
+            self.dialogPolySelect.activate()
+        else:
+            self.pg_selector._selection_completed = True
+            self.pg_selector.clear()
+            self.pg_selector._xys = [(0, 0)]  # TODO: move to clear
+            self.dialogPolySelect.hide()
 
     def keyPressEvent(self, e):
 
         if e.key() == Qt.Key_P:
-            self.pg_selector.set_active(not self.pg_selector.active)
-            if self.pg_selector.active == 1:
-                self.pg_selector.connect_default_events()
-                self.pg_selector._selection_completed = False
-                self.pg_selector.set_visible(True)
-            else:
-                self.pg_selector._selection_completed = True
-                self.pg_selector.clear()
-                self.pg_selector._xys = [(0, 0)]  # TODO: move to clear
+            self.toggle_polySelector()
         if (
             e.key() == Qt.Key_Return and self.pg_selector.active
         ):  # action when pg_selector is done. #TODO: move elsewhere
 
-            # find all the interpolated spikes
-            xys = np.array(self.pg_selector._xys[:-1])
-            window_size = (
-                self.state.analog_signal.sampling_rate * 0.01
-            )  # window size to consider around the peak #TODO: make configurable
-
-            erp = self.state.get_erp()
-            min_peak = (
-                np.std(erp.flatten()) * 2
-            )  # 2x STD of ERP as the minimum size #TODO: make configurable
-            out = []
-
-            for i in range(xys.shape[0] - 1):
-                seg = np.array([xys[i], xys[i + 1]], dtype=int)
-                seg = seg[np.argsort(seg[:, 1])]
-
-                stimpos = np.arange(seg[0, 1], seg[1, 1])
-                arr = np.interp(stimpos, seg[:, 1], seg[:, 0])
-                for x, stimno in zip(arr, stimpos):
-                    x2 = int(x - (window_size // 2))
-                    vals = erp[stimno, x2 : x2 + window_size]
-                    x2_offset = np.argmax(np.abs(vals))
-
-                    if np.abs(vals[x2_offset]) > min_peak:
-                        out.append((x2 + x2_offset, stimno, vals[x2_offset]))
-
-            out = np.array(out)
-            evt = self.state.stimno_offset_to_event(
-                out[:, 1].astype(int), out[:, 0].astype(int)
-            )
-            self.state.updateUnit(evt, merge=True)
+            self.polySelect()
 
         self.update()
 
@@ -548,7 +569,7 @@ class PolygonSelectorTool:  # This is annoyingly close - there are two styles of
 
     def __init__(self, fig, *args, **kwargs):
         self.fig = fig
-        self.poly = PolygonSelector(self.fig.axes[0], self.onselect)
+        self.poly = LineSelector(self.fig.axes[0], self.onselect)
         self.poly.disconnect_events()
 
     def enable(self, *args):
@@ -566,7 +587,7 @@ class DialogSignalSelect(QDialog):
     changeSelection = Signal(str, bool)
 
     def __init__(self, parent=None, options={}):
-        super().__init__(parent)
+        super().__init__(parent, QtCore.Qt.Tool)
         self.initUI(options)
 
     def initUI(self, options):
@@ -582,7 +603,49 @@ class DialogSignalSelect(QDialog):
 
         self.setLayout(self.vbox)
 
-    pass
+
+class DialogPolySelect(QDialog):
+    changeSelection = Signal(float, float)
+    onSubmit = Signal(float, float)
+
+    def __init__(self, parent=None, options={}):
+        super().__init__(parent, QtCore.Qt.Tool)
+        self.initUI(options)
+
+    def initUI(self, options):
+        self.vbox = QFormLayout()
+        self.cboxes = []
+
+        self.window_size_input = QSpinBox(self)
+        self.window_size_input.setMinimum(0)
+        self.window_size_input.setMaximum(200)
+        self.window_size_input.setValue(10)
+        self.window_size_input.setSuffix("ms")
+        self.window_size_input.setBaseSize(100, 10)
+        self.window_size_input.valueChanged.connect(lambda *args: self.change())
+        self.vbox.addRow(self.tr("window size"), self.window_size_input)
+
+        self.minimumThreshold = QDoubleSpinBox(self)
+        self.minimumThreshold.valueChanged.connect(lambda *args: self.change())
+        self.minimumThreshold.setBaseSize(100, 10)
+        self.minimumThreshold.setDecimals(2)
+        self.minimumThreshold.setMinimum(-999999)
+        self.minimumThreshold.setMaximum(999999)
+        self.vbox.addRow(self.tr("minimumThreshold"), self.minimumThreshold)
+
+        self.goButton = QPushButton("track")
+        self.goButton.clicked.connect(lambda: self.onSubmit.emit(*self.getValues()))
+        self.vbox.addRow(self.goButton)
+
+        self.setLayout(self.vbox)
+
+    def change(self):
+        self.changeSelection.emit(
+            self.window_size_input.value, self.minimumThreshold.value
+        )
+
+    def getValues(self):
+        return (self.window_size_input.value(), self.minimumThreshold.value())
 
 
 if __name__ == "__main__":
