@@ -80,7 +80,10 @@ class MdiView(QMainWindow):
             "Events": EventView,
         }
         self.cur_windows = []
+        import pkg_resources
 
+        version = pkg_resources.get_distribution("spikespy").version
+        self.setWindowTitle(f"SpikeSpy - {version}")
         self.state = state or ViewerState(**kwargs)
         self.loadFile.connect(self.state.loadFile)
         self.dock_manager = QtAds.CDockManager(self)
@@ -146,17 +149,23 @@ class MdiView(QMainWindow):
 
         self.shortcut_profile.activated.connect(lambda: profile())
 
-        self.shortcut_next = QShortcut(QKeySequence(Qt.Key_Down), self, context=Qt.ApplicationShortcut)
+        self.shortcut_next = QShortcut(
+            QKeySequence(Qt.Key_Down), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_next.activated.connect(
             lambda: self.state.setStimNo(self.state.stimno + 1)
         )
 
-        self.shortcut_prev = QShortcut(QKeySequence(Qt.Key_Up), self, context=Qt.ApplicationShortcut)
+        self.shortcut_prev = QShortcut(
+            QKeySequence(Qt.Key_Up), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_prev.activated.connect(
             lambda: self.state.setStimNo(self.state.stimno - 1)
         )
 
-        self.shortcut_del = QShortcut(QKeySequence(Qt.Key_Backspace), self, context=Qt.ApplicationShortcut)
+        self.shortcut_del = QShortcut(
+            QKeySequence(Qt.Key_Backspace), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_del.activated.connect(lambda: self.state.setUnit(None))
 
         self.move_mode = "snap"
@@ -183,10 +192,14 @@ class MdiView(QMainWindow):
 
             self.state.setUnit(cur_point + dist)  # TODO: make method
 
-        self.shortcut_left = QShortcut(QKeySequence(Qt.Key_Left), self, context=Qt.ApplicationShortcut)
+        self.shortcut_left = QShortcut(
+            QKeySequence(Qt.Key_Left), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_left.activated.connect(lambda: move(-1))
 
-        self.shortcut_right = QShortcut(QKeySequence(Qt.Key_Right), self, context=Qt.ApplicationShortcut)
+        self.shortcut_right = QShortcut(
+            QKeySequence(Qt.Key_Right), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_right.activated.connect(lambda: move(1))
 
         self.shortcut_numbers = [
@@ -203,10 +216,12 @@ class MdiView(QMainWindow):
         for i, x in enumerate(self.shortcut_numbers):
             x.activated.connect(lambda i=i: self.state.setUnitGroup(i))
 
-
         def toggle_snap():
             self.move_mode = None if self.move_mode == "snap" else "snap"
-        self.shortcut_snap = QShortcut(QKeySequence(Qt.Key_S), self, context=Qt.ApplicationShortcut)
+
+        self.shortcut_snap = QShortcut(
+            QKeySequence(Qt.Key_S), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_snap.activated.connect(toggle_snap)
 
         def copy_previous():
@@ -220,7 +235,10 @@ class MdiView(QMainWindow):
                 self.state.setUnit(new_x)
             except StopIteration:
                 pass
-        self.shortcut_copy_previous= QShortcut(QKeySequence(Qt.Key_C), self, context=Qt.ApplicationShortcut)
+
+        self.shortcut_copy_previous = QShortcut(
+            QKeySequence(Qt.Key_C), self, context=Qt.ApplicationShortcut
+        )
         self.shortcut_copy_previous.activated.connect(copy_previous)
 
     def export_csv(self):
