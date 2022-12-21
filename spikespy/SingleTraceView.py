@@ -189,49 +189,10 @@ class SingleTraceView(QMainWindow):
         self.state.setUnit(x)
 
     def keyPressEvent(self, e):
-        dist = max(self.select_local_maxima_width + 1, 1)
-
-        if e.key() == Qt.Key_C:
-            try:
-                sg = self.state.spike_groups[self.state.cur_spike_group].idx_arr
-                new_x = next(
-                    sg[x][0]
-                    for x in range(self.state.stimno - 1, -1, -1)
-                    if sg[x] is not None
-                )
-                self.set_cur_pos(new_x)
-            except StopIteration:
-                pass
-        elif e.key() == Qt.Key_N:
+        if e.key() == Qt.Key_N:
             self.state.setUnit(self.closest_pos)
         elif e.key() == Qt.Key_Z:
             pass  # TODO: zoom into current spike
-        elif e.key() == Qt.Key_T:
-            # automatically track (#TODO: make this less cryptic & more generic)
-            from .basic_tracking import track_basic
-
-            unit_events = self.state.getUnitGroup().event
-            last_event = unit_events.searchsorted(
-                self.state.event_signal[self.state.stimno] + (0.5 * pq.s)
-            )  # find the most recent event
-
-            starting_time = unit_events[max(last_event - 1, 0)]
-            window = 0.02 * pq.s
-            threshold = (
-                self.state.analog_signal[
-                    self.state.analog_signal.time_index(starting_time)
-                ][0]
-                * 0.8
-            )  # 0.1 * pq.mV
-
-            evt2 = track_basic(
-                self.state.analog_signal,
-                self.state.event_signal,
-                starting_time=starting_time,
-                window=window,
-                threshold=threshold,
-            )
-            self.state.updateUnit(event=unit_events.merge(evt2))
 
 
 if __name__ == "__main__":
