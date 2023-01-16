@@ -4,9 +4,9 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 block_cipher = None
 
-binaries = collect_dynamic_libs('numpy')
+binaries = [] # collect_dynamic_libs('numpy')
 datas = collect_data_files('nixio')
-datas += collect_data_files('spikespy')
+datas += [('spikespy/ui/icon.*','.')]
 a = Analysis(['run.py'],
              pathex=[],
              binaries=binaries,
@@ -15,7 +15,7 @@ a = Analysis(['run.py'],
              hookspath=[],
              hooksconfig={},
              runtime_hooks=[],
-             excludes=[],
+             excludes=['pandas'],
              win_no_prefer_redirects=False,
              win_private_assemblies=False,
              cipher=block_cipher,
