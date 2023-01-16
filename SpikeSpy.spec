@@ -4,7 +4,7 @@
 block_cipher = None
 
 
-a = Analysis(['spikeannotator/SpikeSpy.py'],
+a = Analysis(['spikespy/SpikeSpy.py'],
              pathex=[],
              binaries=[],
              datas=[],
