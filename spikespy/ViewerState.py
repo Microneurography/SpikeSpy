@@ -323,7 +323,7 @@ class ViewerState(QObject):
 
         s = int(
             np.array(signal.sampling_rate.base) // ((1 / window_size))
-        )  # 500ms #TODO: this should be adjustable
+        )  
         erp = create_erp(
             signal.rescale("mV").as_array()[:, channel],
             (event_signal.as_array() - signal.t_start.base)
