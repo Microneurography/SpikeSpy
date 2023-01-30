@@ -225,7 +225,7 @@ class MultiTraceView(QMainWindow):
             self.pg_selector._selection_completed = False
             self.pg_selector.set_visible(True)
             self.dialogPolySelect.show()
-            self.dialogPolySelect.activate()
+            #self.dialogPolySelect.activate()
         else:
             self.pg_selector._selection_completed = True
             self.pg_selector.clear()
