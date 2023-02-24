@@ -152,10 +152,13 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
         )
 
         units = []
-        for x in np.unique(spike_events.array_annotations["spikeGroup"]):
-            e = spike_events[spike_events.array_annotations["spikeGroup"] == x]
-            e.name = f"unit {x}"
-            units.append(e)
+        try:
+            for x in np.unique(spike_events.array_annotations["spikeGroup"]):
+                e = spike_events[spike_events.array_annotations["spikeGroup"] == x]
+                e.name = f"unit {x}"
+                units.append(e)
+        except:
+            pass
         seg.events += units  # TODO: include the protocol info
         seg.events += [stimChange_events, protocol_events]
     return seg
