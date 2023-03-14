@@ -487,12 +487,21 @@ class MultiTraceView(QMainWindow):
     def plot_curstim_line(self, stimNo=None):
         if stimNo is None:
             return
+        if self.hline is not None:
+            del self.hline 
+        
+        if self.mode=="lines":
+            from matplotlib import lines
+            op:lines.Line2D = self.ax_track_leaf[stimNo]
 
-        if self.hline is None:
-            self.hline = self.ax.axhline(stimNo)
-            self.hline.set_animated(True)
+
+            self.hline = lines.Line2D(*self.ax_track_leaf[stimNo].get_data())
+            self.hline.update_from(op)
+            self.hline.set_color("purple")
+            
         else:
-            self.hline.set_ydata(stimNo)
+            self.hline = self.ax.axhline(stimNo)
+        self.hline.set_animated(True)
 
         self.ax.draw_artist(self.hline)
 
