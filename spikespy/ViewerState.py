@@ -274,8 +274,8 @@ class ViewerState(QObject):
             # if sg.idx_arr is not None:
             #    continue
             p = [None for x in range(len(self.event_signal))]
-            for e in sg.event.times:
-                i = int(np.searchsorted(self.event_signal, e, side="right").base) - 1
+            for e in sg.event.rescale("s").times:
+                i = int(np.searchsorted(self.event_signal.rescale("s"), e, side="right").base) - 1
                 if i < 0:
                     continue
                 x = int(

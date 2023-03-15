@@ -115,7 +115,17 @@ class MdiView(QMainWindow):
             QAction("Save as nixio", self, shortcut="Ctrl+S", triggered=self.save_as)
         )
         file_menu.addAction(
-            QAction("Export as csv", self, shortcut="Ctrl+E", triggered=self.export_csv)
+            QAction(
+                "Export spikes as csv",
+                self,
+                shortcut="Ctrl+E",
+                triggered=self.export_csv,
+            )
+        )
+        file_menu.addAction(
+            QAction(
+                "import spikes csv", self, shortcut="Ctrl+I", triggered=self.import_csv
+            )
         )
         edit_menu = self.menubar.addMenu("&Edit")
         edit_menu.addAction(
@@ -245,6 +255,8 @@ class MdiView(QMainWindow):
         save_filename = QFileDialog.getSaveFileName(self, "Export")[0]
         from csv import writer
 
+        if save_filename is None:
+            return
         with open(save_filename, "w") as f:
             w = writer(f)
             w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
@@ -257,6 +269,37 @@ class MdiView(QMainWindow):
                     w.writerow(
                         [f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
                     )
+
+    def import_csv(self):
+        open_filename = QFileDialog.getOpenFileName(self, "csv import")[0]
+        if open_filename is None:
+            return
+        from csv import DictReader
+
+        with open(open_filename, "r") as f:
+            r = DictReader(f)
+            try:
+                k = next(x for x in r.fieldnames if "timestamp" in x.lower())
+            except StopIteration:
+                import logging
+
+                logging.warn("StopIteration not found")
+                return
+
+            unit = pq.ms
+            out = {}
+            for row in r:
+                spikeid = str(row.get("SpikeID", "0"))
+                out[spikeid] = out.get(spikeid, []) + [row[k]]
+
+            out2 = []
+            for k, v in out.items():
+                timestamps = neo.Event(
+                    np.array(v, dtype=np.float64), units=unit, name=f"unit_{k}"
+                )
+                out2.append(tracked_neuron_unit(event=timestamps))
+
+            self.state.set_data(spike_groups=(self.state.spike_groups or []) + out2)
 
     def newWindow(self, k, pos=QtAds.TopDockWidgetArea):
         w = self.window_options[k](parent=self, state=self.state)
