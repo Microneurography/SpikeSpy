@@ -83,11 +83,12 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
 
         header, ch_mmap = readContinous(f.filename)
         sampling_rate = float(header["sampleRate"]) * pq.Hz
-        ch_units_probe = pq.UnitQuantity(
-            "kmicroVolts", pq.uV / float(header["bitVolts"]), symbol="kuV"
-        )
-        # header['']
+        ch_units_probe = pq.CompoundUnit(f"1/{float(header['bitVolts'])} *uV")
+
+        
+        
         if record_no is not None:
+            logging.info(f'Max recording no = {np.max(ch_mmap["recording"])}') 
             ch_mmap2 = ch_mmap[ch_mmap["recording"] == record_no - 1]
         else:
             ch_mmap2 = ch_mmap
@@ -238,6 +239,17 @@ def parse_APTrackEvents(filename):
 
     return [evt_spikeInfo, evt_stimulation_volts, evt_protocolInfo]
 
+def find_channel(chname, all_files, record_no=1):
+    channo = int(re.sub("[^\d]", "", chname))
+    if chname.startswith("ADC"):
+        channo += 16  # sometimes there is just the channel number for ADC
+    rex = f"_(((CH)?{channo})|({chname}))"
+    if record_no > 1:
+        rex += f"(_{record_no})?"
+    rex += ".continuous"
+
+    matches = [x for x in all_files if len(re.findall(rex, str(x.name))) == 1]
+    return sorted(matches,key=lambda x: len(str(x)))[-1] # HACK take the longest match (if includes channame)
 
 def process_folder(foldername: str, record_no=1):
     """
@@ -254,42 +266,32 @@ def process_folder(foldername: str, record_no=1):
     """
     all_files = list(Path(foldername).glob(f"*.continuous"))
 
-    def find_channel(chname, foldername=None):
-        channo = int(re.sub("[^\d]", "", chname))
-        if chname.startswith("ADC"):
-            channo += 16  # sometimes there is just the channel number for ADC
-        rex = f"_(((CH)?{channo})|({chname}))"
-        if record_no > 1:
-            rex += f"(_{record_no})?"
-        rex += ".continuous"
-
-        matches = [x for x in all_files if len(re.findall(rex, str(x.name))) == 1]
-        return matches[0]
+    find_channel_lambda = lambda x, all_files=all_files, record_no=record_no: find_channel(x, all_files=all_files, record_no=record_no)
 
     signals = [
         APTrackRecording(
-            find_channel("CH1"), TypeID.ANALOG, "rd.0", "microneurography probe"
+            find_channel_lambda("CH1"), TypeID.ANALOG, "rd.0", "microneurography probe"
         ),  # main,
         APTrackRecording(
-            find_channel("ADC4"),
+            find_channel_lambda("ADC4", ),
             TypeID.TTL,
             "env.stimVolt",
             "A TTL of the stimulation voltage",
         ),
         APTrackRecording(
-            find_channel("ADC5"), TypeID.TTL, "env.stim", "A TTL of the stimulation"
+            find_channel_lambda("ADC5"), TypeID.TTL, "env.stim", "A TTL of the stimulation"
         ),
         APTrackRecording(
-            find_channel("ADC5"), TypeID.ANALOG, "env.stim", "A TTL of the stimulation"
+            find_channel_lambda("ADC5"), TypeID.ANALOG, "env.stim", "A TTL of the stimulation"
         ),
         APTrackRecording(
-            find_channel("ADC7"),
+            find_channel_lambda("ADC7"),
             TypeID.ANALOG,
             "env.thermode",
             "Thermal stimulation temperatures",
         ),
         APTrackRecording(
-            find_channel("ADC8"),
+            find_channel_lambda("ADC8"),
             TypeID.TTL,
             "rec.button",
             "Manual button press, usually to signify a change in protocol or mechanical stimulation",
@@ -297,6 +299,9 @@ def process_folder(foldername: str, record_no=1):
     ]
 
     messages = Path(foldername) / "messages.events"
+    if record_no > 1:
+        if(find_channel_lambda("CH1").stem.endswith(f"_{record_no}")):
+            record_no = None # HACK - in the case where there is _{record_no} we dont want to filter the subsequent data.
     neo = as_neo(
         signals, str(messages) if messages.exists() else None, record_no=record_no
     )

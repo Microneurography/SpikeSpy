@@ -289,7 +289,7 @@ class MultiTraceView(QMainWindow):
                 np.arange(0, len(self.state.event_signal.times)),
             )
 
-        self.rightPlots = {k: True for k, v in self.right_ax_data.items()}
+        self.rightPlots = {k: False for k, v in self.right_ax_data.items()}
         self.settingsDialog = DialogSignalSelect(options=self.rightPlots)
 
         def updateView(k, v):
@@ -376,6 +376,8 @@ class MultiTraceView(QMainWindow):
             self.ax_right.append(self.fig.add_subplot(gs00[0, i], sharey=self.ax))
             self.ax_right[i].set_yticks([])
             c = next(colorwheel)
+            if len(data)!=2 or len(data[0]) == 0:
+                continue
             self.ax_right[i].plot(*data, label=label, color=c)
             self.ax_right[i].set_xlabel(label)
             self.ax_right[i].xaxis.label.set_color(c)
