@@ -1,4 +1,4 @@
-# spikeannotator
+# SpikeSpy
 
 A gui for annotating stimulus locked electrophysiology data (microneurography)
 
