@@ -1,13 +1,16 @@
 from PySide6 import QtWidgets
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialogButtonBox
 
 from PySide6.QtCore import QAbstractListModel, Qt, QAbstractTableModel
+
 from neo import Event
 from .ui.EventView import Ui_EventView
 from .ViewerState import ViewerState
 from typing import List
 import sys
 import numpy as np
+import neo
+import quantities as pq
 
 
 class ListModel(QAbstractListModel):
@@ -136,7 +139,15 @@ class EventView(QtWidgets.QWidget):
         self.model.updateEvent(e)
 
     def add_clicked(self):
-        pass
+
+        dialog = EventEdit(
+            self,
+            self.state.event_signal[self.state.stimno],
+            {k: "" for k in self.model.event.array_annotations.keys()},
+        )
+        dialog.buttonBox.accepted.connect(lambda x: print(x))
+        dialog.setModal(True)
+        dialog.show()
 
     def del_clicked(self):
         idxs = self.ui.eventTableView.selectedIndexes()
@@ -174,13 +185,46 @@ class EventView(QtWidgets.QWidget):
         self.ui.eventDetailView.setText(f"{row} - {nom}\n{info}")
 
 
+class EventEdit(QtWidgets.QDialog):
+    def __init__(self, parent=None, event: neo.Event = None, annotations: dict = None):
+        super().__init__(parent)
+        QBtn = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+
+        self.buttonBox = QDialogButtonBox(QBtn)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+
+        layout = QtWidgets.QFormLayout()
+        self.timestamp = QtWidgets.QDoubleSpinBox(self)
+        self.timestamp.setMaximum(60 * 60 * 60)  # a 60 hour recording
+        self.timestamp.setValue(np.array(event.rescale(pq.s)))
+        layout.addRow("timestamp", self.timestamp)
+        self.editValues = {}
+        for k, v in annotations.items():
+            self.editValues[k] = QtWidgets.QLineEdit(self)
+            self.editValues[k].setText(str(v))
+            layout.addRow(k, self.editValues[k])
+
+        self.saveButton = QtWidgets.QPushButton(text="save")
+
+        widget2 = QtWidgets.QWidget()
+        widget2.setLayout(layout)
+
+        layout2 = QtWidgets.QVBoxLayout(self)
+        layout2.addWidget(widget2)
+        layout2.addWidget(self.buttonBox)
+        self.setLayout(layout2)
+
+
 if __name__ == "__main__":
 
     app = QApplication([])
     state = ViewerState()
     state.loadFile(r"/Users/xs19785/Documents/Open Ephys/06-dec.h5")
-
+    # evt = neo.Event(np.array([100]) * pq.s)
+    # evt.array_annotate(info=["something"], number=[5])
     view = EventView(state=state)
+    # view = EventEdit(event=evt[0], annotations=evt.array_annotations_at_index(0))
     view.show()
     app.exec()
     sys.exit()
