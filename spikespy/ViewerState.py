@@ -219,13 +219,14 @@ class ViewerState(QObject):
         cur_evt = self.spike_groups[self.cur_spike_group].event
         if merge:
             # update the existing events with the new ones, removing ones within 0.5s of the other
-            time_gap = 0.5 * pq.s
+
             newEvents = []
             nxt_evt2 = event.searchsorted(self.event_signal)
             nxt_old = cur_evt.searchsorted(self.event_signal)
             for i, (e, new, old) in enumerate(
                 zip(self.event_signal, nxt_evt2, nxt_old)
             ):
+                time_gap = 0.5 * pq.s
 
                 if i < len(self.event_signal) - 1:
                     t = self.event_signal[i + 1] - e
@@ -275,7 +276,14 @@ class ViewerState(QObject):
             #    continue
             p = [None for x in range(len(self.event_signal))]
             for e in sg.event.rescale("s").times:
-                i = int(np.searchsorted(self.event_signal.rescale("s"), e, side="right").base) - 1
+                i = (
+                    int(
+                        np.searchsorted(
+                            self.event_signal.rescale("s"), e, side="right"
+                        ).base
+                    )
+                    - 1
+                )
                 if i < 0:
                     continue
                 x = int(
@@ -321,9 +329,7 @@ class ViewerState(QObject):
         signal = self.segment.analogsignals[signal_idx]
         event_signal = self.segment.events[event_signal_idx]
 
-        s = int(
-            np.array(signal.sampling_rate.base) // ((1 / window_size))
-        )  
+        s = int(np.array(signal.sampling_rate.base) // ((1 / window_size)))
         erp = create_erp(
             signal.rescale("mV").as_array()[:, channel],
             (event_signal.as_array() - signal.t_start.base)
@@ -427,7 +433,11 @@ def load_file(data_path, type="h5", **kwargs):
     # elif type == "dabsys":
     # data = import_dapsys_csv_files(data_path)[0].segments[0]
     elif type == "openEphys":
-        data = open_ephys_to_neo(data_path)
+        # data = open_ephys_to_neo(data_path)
+        data = neo.OpenEphysBinaryIO(data_path).read_block(0).segments[0]
+
+    elif type == "nwb":
+        data = neo.NWBIO(data_path).read_block(block_index=0).segments[0]
 
     elif type == "matlab":
         data = open_matlab_to_neo(data_path)

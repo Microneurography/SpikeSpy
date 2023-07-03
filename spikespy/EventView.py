@@ -138,6 +138,10 @@ class EventView(QtWidgets.QWidget):
         e = self.eventSelectorModel.listData[index]
         self.model.updateEvent(e)
 
+    def add_event(self, info):
+        # TODO: update the event and annotations of selected event.
+        pass
+
     def add_clicked(self):
 
         dialog = EventEdit(
@@ -145,7 +149,8 @@ class EventView(QtWidgets.QWidget):
             self.state.event_signal[self.state.stimno],
             {k: "" for k in self.model.event.array_annotations.keys()},
         )
-        dialog.buttonBox.accepted.connect(lambda x: print(x))
+
+        dialog.buttonBox.accepted.connect(lambda: self.add_event(dialog.annotations))
         dialog.setModal(True)
         dialog.show()
 
@@ -194,15 +199,23 @@ class EventEdit(QtWidgets.QDialog):
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)
 
+        self.annotations = {**annotations, "timestamp": np.array(event.rescale(pq.s))}
+
+        def on_change(s, k):
+            self.annotations[k] = s
+
         layout = QtWidgets.QFormLayout()
         self.timestamp = QtWidgets.QDoubleSpinBox(self)
         self.timestamp.setMaximum(60 * 60 * 60)  # a 60 hour recording
         self.timestamp.setValue(np.array(event.rescale(pq.s)))
+        self.timestamp.valueChanged.connect(lambda s: on_change(s, "timestamp"))
         layout.addRow("timestamp", self.timestamp)
         self.editValues = {}
+
         for k, v in annotations.items():
             self.editValues[k] = QtWidgets.QLineEdit(self)
             self.editValues[k].setText(str(v))
+            self.editValues[k].textChanged.connect(lambda s, k=k: on_change(s, k))
             layout.addRow(k, self.editValues[k])
 
         self.saveButton = QtWidgets.QPushButton(text="save")
