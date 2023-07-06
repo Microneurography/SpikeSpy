@@ -87,7 +87,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             "kmicroVolts", pq.uV / float(header["bitVolts"]), symbol="kuV"
         )
         # header['']
-        if record_no is not None:
+        if record_no is not None and record_no >= 1:
             ch_mmap2 = ch_mmap[ch_mmap["recording"] == record_no - 1]
         else:
             ch_mmap2 = ch_mmap
@@ -121,7 +121,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             idxs = find_square_pulse_numpy(
                 ch_mmap2["data"].flat,
                 int(int(header["sampleRate"]) * 0.0004),
-                (2 * np.std(ch_mmap2["data"])) + m,
+                (2 * np.std(ch_mmap2["data"] - m)) + m,
             )  # 2sd from mean
 
             idxs_rising = idxs[
@@ -239,7 +239,7 @@ def parse_APTrackEvents(filename):
     return [evt_spikeInfo, evt_stimulation_volts, evt_protocolInfo]
 
 
-def process_folder(foldername: str, record_no=1):
+def process_folder(foldername: str, record_no=1, config=None):
     """
     taking a given folder convert to neo using the as_neo function
 
@@ -251,6 +251,7 @@ def process_folder(foldername: str, record_no=1):
     ADC8 = Button
 
     messages.events = APTrack spike info.
+    config paramter can override these to suit older data.
     """
     all_files = list(Path(foldername).glob(f"*.continuous"))
 
@@ -266,30 +267,41 @@ def process_folder(foldername: str, record_no=1):
         matches = [x for x in all_files if len(re.findall(rex, str(x.name))) == 1]
         return matches[0]
 
+    if config is None:
+        config = {}
     signals = [
         APTrackRecording(
-            find_channel("CH1"), TypeID.ANALOG, "rd.0", "microneurography probe"
+            find_channel(config.get("rd.0", "CH1")),
+            TypeID.ANALOG,
+            "rd.0",
+            "microneurography probe",
         ),  # main,
         APTrackRecording(
-            find_channel("ADC4"),
+            find_channel(config.get("stimVolt", "ADC4")),
             TypeID.TTL,
             "env.stimVolt",
             "A TTL of the stimulation voltage",
         ),
         APTrackRecording(
-            find_channel("ADC5"), TypeID.TTL, "env.stim", "A TTL of the stimulation"
+            find_channel(config.get("stim", "ADC5")),
+            TypeID.TTL,
+            "env.stim",
+            "A TTL of the stimulation",
         ),
         APTrackRecording(
-            find_channel("ADC5"), TypeID.ANALOG, "env.stim", "A TTL of the stimulation"
+            find_channel(config.get("stim", "ADC5")),
+            TypeID.ANALOG,
+            "env.stim",
+            "A TTL of the stimulation",
         ),
         APTrackRecording(
-            find_channel("ADC7"),
+            find_channel(config.get("thermode", "ADC7")),
             TypeID.ANALOG,
             "env.thermode",
             "Thermal stimulation temperatures",
         ),
         APTrackRecording(
-            find_channel("ADC8"),
+            find_channel(config.get("button", "ADC8")),
             TypeID.TTL,
             "rec.button",
             "Manual button press, usually to signify a change in protocol or mechanical stimulation",
@@ -302,6 +314,24 @@ def process_folder(foldername: str, record_no=1):
     )
 
     return neo
+
+
+def process_oe_binary(folder):
+    """
+    CH1 = main
+    ADC4 = stimVolt
+    ADC5 = TTL
+    ADC7 = Temperature
+    ADC8 = Button
+    """
+    from open_ephys.analysis import Session
+
+    folder = "/Users/xs19785/Library/CloudStorage/OneDrive-UniversityofBristol/Microneurography/Data/2023-01-31_11-47-16/Record Node 103/"
+
+    sess = Session(folder)
+    recording = sess.recordings[0]
+
+    pass
 
 
 # def process_folder2(foldername:str, chnum):

@@ -225,7 +225,7 @@ class MultiTraceView(QMainWindow):
             self.pg_selector._selection_completed = False
             self.pg_selector.set_visible(True)
             self.dialogPolySelect.show()
-            self.dialogPolySelect.activate()
+            # self.dialogPolySelect.activate()
         else:
             self.pg_selector._selection_completed = True
             self.pg_selector.clear()
@@ -284,10 +284,13 @@ class MultiTraceView(QMainWindow):
             "latency_diff": (out, np.arange(len(latencies))),
         }
         for x in self.state.segment.analogsignals:
-            self.right_ax_data[x.name] = (
-                np.mean(self.state.get_erp(x, self.state.event_signal), axis=1),
-                np.arange(0, len(self.state.event_signal.times)),
-            )
+            try:
+                self.right_ax_data[x.name] = (
+                    np.mean(self.state.get_erp(x, self.state.event_signal), axis=1),
+                    np.arange(0, len(self.state.event_signal.times)),
+                )
+            except:
+                pass
 
         self.rightPlots = {k: True for k, v in self.right_ax_data.items()}
         self.settingsDialog = DialogSignalSelect(options=self.rightPlots)
@@ -322,7 +325,7 @@ class MultiTraceView(QMainWindow):
                 aspect="auto",
                 cmap="gray_r",
                 clim=(self.percentiles[40], self.percentiles[95]),
-                interpolation="antialiased",
+                interpolation="antialiased",  # slows down render (i suspect)
             )
         elif mode == "lines":
 
@@ -330,7 +333,7 @@ class MultiTraceView(QMainWindow):
             analog_signal_erp_norm = np.clip(self.state.get_erp(), -p90, p90) / (
                 p90 * 2
             )
-            self.ax_track_leaf = self.ax.plot(
+            self.ax_track_leaf = self.ax.plot(  # could increase performance to just plot lines in view. but then no blitting...
                 (
                     (analog_signal_erp_norm * -1)
                     + np.arange(analog_signal_erp_norm.shape[0])[:, np.newaxis]
@@ -487,12 +490,21 @@ class MultiTraceView(QMainWindow):
     def plot_curstim_line(self, stimNo=None):
         if stimNo is None:
             return
+        if self.hline is not None:
+            del self.hline
 
-        if self.hline is None:
-            self.hline = self.ax.axhline(stimNo)
-            self.hline.set_animated(True)
+        if self.mode == "lines":
+            from matplotlib import lines
+
+            op: lines.Line2D = self.ax_track_leaf[stimNo]
+
+            self.hline = lines.Line2D(*self.ax_track_leaf[stimNo].get_data())
+            self.hline.update_from(op)
+            self.hline.set_color("purple")
+
         else:
-            self.hline.set_ydata(stimNo)
+            self.hline = self.ax.axhline(stimNo)
+        self.hline.set_animated(True)
 
         self.ax.draw_artist(self.hline)
 
@@ -558,28 +570,6 @@ class LineSelector(PolygonSelector):
             self._selection_completed = False
             self._remove_box()
             self.set_visible(True)
-
-
-class PolygonSelectorTool:  # This is annoyingly close - there are two styles of tools in matplotlib, and i cannot get this one to work embedded in QT (no toolmanager)
-    """Polygon selector"""
-
-    default_keymap = "S"
-    description = "PolygonSelection"
-    default_toggled = True
-
-    def __init__(self, fig, *args, **kwargs):
-        self.fig = fig
-        self.poly = LineSelector(self.fig.axes[0], self.onselect)
-        self.poly.disconnect_events()
-
-    def enable(self, *args):
-        self.poly.connect_default_events()
-
-    def disable(self, *args):
-        self.poly.disconnect_events()
-
-    def onselect(self, verts):
-        print(verts)
 
 
 class DialogSignalSelect(QDialog):

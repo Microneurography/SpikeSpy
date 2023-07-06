@@ -1,18 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+import scipy
 block_cipher = None
 
-
-a = Analysis(['spikespy/SpikeSpy.py'],
-             pathex=[],
-             binaries=[],
-             datas=[],
-             hiddenimports=[],
+binaries = [] # collect_dynamic_libs('numpy')
+scipy_libs = os.path.join(os.path.dirname(scipy.__file__), '.libs')
+datas = collect_data_files('nixio')
+datas += [('spikespy/ui/icon.*','.')]
+a = Analysis(['run.py'],
+             pathex=[scipy_libs],
+             binaries=binaries,
+             datas=datas,
+             hiddenimports=['nixio', 'scipy','scipy.signal'],
              hookspath=[],
              hooksconfig={},
              runtime_hooks=[],
-             excludes=[],
+             excludes=['pandas'],
              win_no_prefer_redirects=False,
              win_private_assemblies=False,
              cipher=block_cipher,
@@ -26,7 +30,7 @@ exe = EXE(pyz,
           a.zipfiles,
           a.datas,  
           [],
-          name='spikespy',
+          name='SpikeSpy',
           debug=False,
           bootloader_ignore_signals=False,
           strip=False,
