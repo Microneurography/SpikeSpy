@@ -14,7 +14,17 @@ import quantities as pq
 from neo import Event
 from neo.io import NixIO
 from PySide6.QtCore import QObject, Qt, Signal, Slot
-from PySide6.QtWidgets import QFileDialog, QInputDialog
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QInputDialog,
+    QDialog,
+    QFormLayout,
+    QLabel,
+    QLineEdit,
+    QSpinBox,
+    QDialogButtonBox,
+    QMessageBox,
+)
 
 from .APTrack_experiment_import import process_folder as open_aptrack
 from .NeoOpenEphyisIO import open_ephys_to_neo
@@ -132,6 +142,7 @@ class ViewerState(QObject):
         self.window_size = 0.5 * pq.s
         self.undo_queue = []
         self.MAX_UNDO = 10
+        self.title = ""
 
     def save_undo(self, func):
         self.undo_queue.append(func)
@@ -259,7 +270,22 @@ class ViewerState(QObject):
 
     @Slot(str, str)
     def loadFile(self, fname, type="h5", **kwargs):
-        data, analog_signal, event_signal, spike_groups = load_file(fname, type)
+        try:
+            data, analog_signal, event_signal, spike_groups = load_file(fname, type)
+        except:
+            import traceback
+
+            traceback.print_exc()
+            qmb = QMessageBox(
+                QMessageBox.Critical,
+                "Sorry :(",
+                f'Unable to load "{fname}" using {type}',
+            )
+            qmb.setModal(True)
+            qmb.exec()
+
+            return
+        self.title = fname
         self.segment = data
         self.cur_spike_group = 0
         self.set_data(analog_signal, event_signal, spike_groups=spike_groups)
@@ -443,11 +469,12 @@ def load_file(data_path, type="h5", **kwargs):
         data = open_matlab_to_neo(data_path)
 
     elif type == "APTrack":
-        d = QInputDialog(None).getInt(
-            None, "Record number", "record number", minValue=1, step=1
-        )
-        t = d[0] if d[1] else ""
-        data = open_aptrack(data_path, t)
+        d = APTrackDialog()
+        val = d.exec_()
+
+        config = d.get_config()
+        t = config.pop("record")
+        data = open_aptrack(data_path, t, config)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
     elif type == "spike2":
@@ -510,3 +537,42 @@ def open_matlab_to_neo(folder):
 
 def open_smrx_to_neo(file):
     pass
+
+
+class APTrackDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.layout = QFormLayout()
+        self.setLayout(self.layout)
+
+        self.layout.addRow(QLabel("custom parameters"))
+        self.sbRecordNumber = QSpinBox()
+        self.sbRecordNumber.setMinimum(0)
+
+        self.layout.addRow(QLabel("recording"), self.sbRecordNumber)
+        config = {
+            "rd.0": "CH1",
+            "stimVolt": "ADC4",
+            "stim": "ADC5",
+            "thermode": "ADC7",
+            "button": "ADC8",
+        }
+        self.inputsConfig = {}
+        for k, v in config.items():
+            inputBox = QLineEdit(v)
+
+            self.inputsConfig[k] = inputBox
+            self.layout.addRow(QLabel(k), inputBox)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.layout.addRow(self.buttons)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+
+    def get_config(self):
+        config = {}
+        config["record"] = self.sbRecordNumber.value()
+        for k, v in self.inputsConfig.items():
+            config[k] = v.text()
+
+        return config

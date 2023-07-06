@@ -86,6 +86,11 @@ class MdiView(QMainWindow):
         self.setWindowTitle(f"SpikeSpy - {version}")
         self.state = state or ViewerState(**kwargs)
         self.loadFile.connect(self.state.loadFile)
+        self.state.onLoadNewFile.connect(
+            lambda self=self: self.setWindowTitle(
+                f"SpikeSpy ({version}) - {Path(self.state.title).name}"
+            )
+        )
         self.dock_manager = QtAds.CDockManager(self)
         self.mdi = QMdiArea()
         # self.setCentralWidget(self.mdi)
@@ -259,6 +264,7 @@ class MdiView(QMainWindow):
             return
         with open(save_filename, "w") as f:
             w = writer(f)
+            # self.state.segment
             w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
             for i, sg in enumerate(self.state.spike_groups):
                 for timestamp in sg.event:
