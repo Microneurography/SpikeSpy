@@ -3,7 +3,7 @@ packages = [
     { include = "spikespy" }
 ]
 name="spikespy"
-version = "0.1.9"
+version = "0.1.10"
 description = ""
 authors = ["Aidan Nickerson"]
 
