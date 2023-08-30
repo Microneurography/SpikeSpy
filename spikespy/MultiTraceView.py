@@ -38,6 +38,148 @@ from .ViewerState import ViewerState, tracked_neuron_unit
 
 mplstyle.use("fast")
 
+from matplotlib.axes import Axes
+
+
+class falling_leaf_plotter:
+    def __init__(self):
+        self.ax_track_cmap = None
+        self.ax_track_leaf = None
+        self.percentiles = []
+        self.cb1 = None
+        self.cb2 = None
+        self.mode = None
+        self.partial = False
+
+    def setup(self, ax: Axes, erp, sampling_rate=1000, mode="heatmap"):
+        self.percentiles = np.percentile(erp, np.arange(100))
+        self.mode = mode
+
+        # self.cb2 = ax.callbacks.connect("ylim_changed", self.setup)
+
+        func_formatter = matplotlib.ticker.FuncFormatter(
+            lambda x, pos: "{0:g}".format(1000 * x / sampling_rate)
+        )
+        ax.xaxis.set_major_formatter(func_formatter)
+        loc = matplotlib.ticker.MultipleLocator(
+            base=sampling_rate / 100
+        )  # this locator puts ticks at regular intervals
+        ax.xaxis.set_major_locator(loc)
+
+    def plot_main(self, mode, ax: Axes, erp, partial=True):
+        self.mode = mode
+
+        ylim = ax.get_ylim()
+        ylim = [max(int(np.floor(ylim[0])), 0), int(np.ceil(ylim[1]))]
+        xlim = ax.get_xlim()
+        xlim = [max(int(np.floor(xlim[0])), 0), int(np.ceil(xlim[1]))]
+        if partial:
+            im_data = erp[ylim[0] : ylim[1], xlim[0] : xlim[1]]
+        else:
+            im_data = erp
+        if mode == "heatmap":
+            if self.ax_track_leaf is not None:
+                self.ax_track_leaf.remove()
+                self.ax_track_leaf = None
+
+            if self.ax_track_cmap is not None:
+                try:
+                    self.ax_track_cmap.remove()
+                    self.ax_track_cmap = None
+                except:
+                    pass
+            #    self.ax_track_cmap.remove()
+            ax.set_autoscale_on(False)
+
+            self.ax_track_cmap = ax.imshow(
+                np.abs(im_data),
+                aspect="auto",
+                cmap="gray_r",
+                clim=(self.percentiles[40], self.percentiles[95]),
+                extent=(xlim[0], xlim[1], ylim[1], ylim[0]),
+                interpolation="antialiased",  # slows down render (i suspect)
+            )
+            self.ax_track_cmap.set_animated(True)
+            ax.draw_artist(self.ax_track_cmap)
+            self.ax_track_cmap.set_visible(True)
+        elif mode == "lines":
+            if self.ax_track_cmap is not None:
+                self.ax_track_cmap.set_visible(False)
+
+            p90 = self.percentiles[95] * 4
+            analog_signal_erp_norm = np.clip(
+                im_data,
+                -p90,
+                p90,
+            ) / (p90 * 2)
+            if self.ax_track_leaf is not None:
+                # return
+                self.ax_track_leaf.remove()
+                self.ax_track_leaf = None
+
+            x = np.arange(analog_signal_erp_norm.shape[1]) + (xlim[0] if partial else 0)
+            ys = (analog_signal_erp_norm * -1) + (
+                np.arange(analog_signal_erp_norm.shape[0]) + (ylim[0] if partial else 0)
+            )[:, np.newaxis]
+            segs = [np.column_stack([x, y]) for y in ys]
+            from matplotlib.collections import LineCollection
+
+            self.ax_track_leaf = LineCollection(
+                segs, array=x, linestyles="solid", color="gray"
+            )
+
+            ax.add_artist(self.ax_track_leaf)
+
+            # self.ax_track_leaf = ax.plot(  # could increase performance to just plot lines in view. but then no blitting...
+            #     (
+            #         (analog_signal_erp_norm * -1)
+            #         + (np.arange(analog_signal_erp_norm.shape[0]) + ylim[0])[
+            #             :, np.newaxis
+            #         ]
+            #     ).T,
+            #     color="gray",
+            #     zorder=10,
+            # )
+
+    def highlight_stim(self, ax, stimNo, partial=True):
+        if stimNo is None:
+            return
+        if self.mode == "lines":
+            from matplotlib import lines
+
+            ax_leaf_paths = self.ax_track_leaf.get_paths()
+
+            to_color_idx = stimNo - (np.floor(ax.get_ylim()[0]) if partial else 0)
+            new_colors = [
+                "purple" if x == to_color_idx else "gray"
+                for x in range(len(ax_leaf_paths))
+            ]
+            self.ax_track_leaf.set_colors(new_colors)
+
+            # op: lines.Line2D = self.mainPlotter.ax_track_leaf[stimNo]
+
+            # self.hline = lines.Line2D(
+            #     *self.mainPlotter.ax_track_leaf[to_color_idx].get_data()
+            # )
+            # self.hline.update_from(op)
+            # self.hline.set_color("purple")
+        else:
+            self.hline = ax.axhline(stimNo)
+            self.hline.set_animated(True)
+
+            ax.draw_artist(self.hline)
+
+    def plot_spikegroup(self, ax, sg, **kwargs):
+
+        points = np.array(
+            [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
+        )
+        if len(points) == 0:
+            return
+        scat = ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
+        # scat.set_animated(True)
+        ax.draw_artist(scat)
+
 
 class MultiTraceView(QMainWindow):
     right_ax_data = {}
@@ -167,6 +309,7 @@ class MultiTraceView(QMainWindow):
             self.ax,
             lambda *args: None,
             props=dict(color="purple", linestyle="-", linewidth=2, alpha=0.5),
+            # useblit=True,
         )  # useblit does not work (for unknown reasons)
         self.pg_selector.set_active(False)
         self.update_axis()
@@ -535,7 +678,18 @@ class MultiTraceView(QMainWindow):
         self.state.setStimNo(round(e.ydata))
 
 
+from matplotlib.lines import Line2D
+
+
 class LineSelector(PolygonSelector):
+    # self.outerlines = None
+    # def calculate_hits
+    def _draw_polygon(self):
+        # if self.outerlines is None:
+        # self.outerlines = Line2D
+
+        super()._draw_polygon()
+
     def _release(self, event):
         """Button release event handler."""
         # Release active tool handle.

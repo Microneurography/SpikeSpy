@@ -65,3 +65,23 @@ def wavelet_denoise_prespecified(in_arr, threshold_arr=None, wlet="sym7"):
         coeffs2.append(pywt.threshold(c, threshold, mode="hard"))
     recon = pywt.waverec([coeffs[0], *coeffs2], wlet)
     return recon
+
+
+def create_erp(signal_chan, idxs, offset=-1000, length=30000):
+    arr = np.zeros((len(idxs), length))
+    for i, x in enumerate(idxs):
+        arr[i].flat[:] = signal_chan[int(x + offset) : int(x + offset + length)]
+    return arr
+
+
+def create_erp_signals(signal, event, offset, length, channel=0):
+    start = int(np.array(signal.sampling_rate.base) // ((1 / offset)))
+    end = int(np.array(signal.sampling_rate.base) // ((1 / length)))
+    erp = create_erp(
+        signal.as_array()[:, channel],
+        (event.as_array() - signal.t_start.base)
+        * np.array(signal.sampling_rate, dtype=int),
+        start,
+        end,
+    )
+    return erp

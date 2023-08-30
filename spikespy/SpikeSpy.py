@@ -114,22 +114,30 @@ class MdiView(QMainWindow):
 
         file_menu = self.menubar.addMenu("&File")
         file_menu.addAction(
-            QAction("Open", self, shortcut="Ctrl+O", triggered=self.open)
+            QAction("Open", self, shortcut="Ctrl+O", triggered=lambda: self.open())
         )
         file_menu.addAction(
-            QAction("Save as nixio", self, shortcut="Ctrl+S", triggered=self.save_as)
+            QAction(
+                "Save as nixio",
+                self,
+                shortcut="Ctrl+S",
+                triggered=lambda: self.save_as(),
+            )
         )
         file_menu.addAction(
             QAction(
                 "Export spikes as csv",
                 self,
                 shortcut="Ctrl+E",
-                triggered=self.export_csv,
+                triggered=lambda: self.export_csv(),
             )
         )
         file_menu.addAction(
             QAction(
-                "import spikes csv", self, shortcut="Ctrl+I", triggered=self.import_csv
+                "import spikes csv",
+                self,
+                shortcut="Ctrl+I",
+                triggered=lambda: self.import_csv(),
             )
         )
         edit_menu = self.menubar.addMenu("&Edit")

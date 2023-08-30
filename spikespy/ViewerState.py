@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from .APTrack_experiment_import import process_folder as open_aptrack
 from .NeoOpenEphyisIO import open_ephys_to_neo
+from .processing import create_erp
 
 
 class lru_numpy_memmap:
@@ -113,13 +114,6 @@ class tracked_neuron_unit:
             i = np.searchsorted(event_signal, e) - 1
             p[i] = (e - event_signal[i]).rescale(pq.ms)
         return p
-
-
-def create_erp(signal_chan, idxs, offset=-1000, length=30000):
-    arr = np.zeros((len(idxs), length))
-    for i, x in enumerate(idxs):
-        arr[i].flat[:] = signal_chan[int(x + offset) : int(x + offset + length)]
-    return arr
 
 
 class ViewerState(QObject):
