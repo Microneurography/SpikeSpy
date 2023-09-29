@@ -221,18 +221,19 @@ class ViewerState(QObject):
 
         self.save_undo(undo)
 
-        cur_evt = self.spike_groups[self.cur_spike_group].event
+        old_evt = self.spike_groups[self.cur_spike_group].event.rescale(pq.s)
+        new_event = event.rescale(pq.s)
         if merge:
             # update the existing events with the new ones, removing ones within 0.5s of the other
 
             newEvents = []
-            new_evt_idxs = self.event_signal.searchsorted(event) - 1
-            old_evt_idxs = self.event_signal.searchsorted(cur_evt) - 1
+            new_evt_idxs = self.event_signal.rescale(pq.s).searchsorted(new_event) - 1
+            old_evt_idxs = self.event_signal.rescale(pq.s).searchsorted(old_evt) - 1
 
             for i, t in enumerate(self.event_signal):
-                time_gap = 0.5 * pq.s  # TODO get from state
+                time_gap = 1 * pq.s  # TODO get from state
 
-                for x in [*event[new_evt_idxs == i], *cur_evt[old_evt_idxs == i]]:
+                for x in [*new_event[new_evt_idxs == i], *old_evt[old_evt_idxs == i]]:
                     if x <= t + time_gap and x >= t:
                         newEvents.append(x)
                         break

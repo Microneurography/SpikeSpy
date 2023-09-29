@@ -15,7 +15,15 @@ import PySide6
 import quantities as pq
 from matplotlib.widgets import PolygonSelector
 from neo.io import NixIO
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QObject,
+    Qt,
+    Signal,
+    Slot,
+    QSettings,
+)
 from PySide6.QtGui import QAction, QColor, QShortcut, QKeySequence, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -60,6 +68,18 @@ class MdiView(QMainWindow):
     # signals
     loadFile = Signal(str, str)
 
+    def savePerspectives(self):
+        # TODO: this currently works if all the required window titles are open. need to:
+        # 1. create unique window names
+        # 2. save the details of the windows to reopen
+        # 3. save the 'state' of the windows (zoom levels etc.)
+        self.dock_manager.addPerspective("main")
+        self.dock_manager.savePerspectives(self.settings_file)
+
+    def loadPerspectives(self):
+        self.dock_manager.loadPerspectives(self.settings_file)
+        self.dock_manager.openPerspective("main")
+
     def __init__(
         self,
         parent: PySide6.QtWidgets.QWidget = None,
@@ -67,7 +87,7 @@ class MdiView(QMainWindow):
         **kwargs,
     ) -> None:
         super().__init__(parent)
-
+        self.settings_file = QSettings("spikespy.ini", QSettings.Format.IniFormat)
         self.window_options = {
             # 'TraceAnnotation': TraceView,
             "MultiTrace": MultiTraceView,
@@ -92,6 +112,7 @@ class MdiView(QMainWindow):
             )
         )
         self.dock_manager = QtAds.CDockManager(self)
+        self.dock_manager.addPerspective("main")
         self.mdi = QMdiArea()
         # self.setCentralWidget(self.mdi)
 
@@ -145,6 +166,12 @@ class MdiView(QMainWindow):
             QAction(
                 "undo", self, shortcut="Ctrl+Z", triggered=lambda: self.state.undo()
             )
+        )
+        edit_menu.addAction(
+            QAction("save perspective", self, triggered=self.savePerspectives)
+        )
+        edit_menu.addAction(
+            QAction("load perspective", self, triggered=self.loadPerspectives)
         )
 
         # key shortcuts
@@ -311,7 +338,7 @@ class MdiView(QMainWindow):
                 timestamps = neo.Event(
                     np.array(v, dtype=np.float64), units=unit, name=f"unit_{k}"
                 )
-                out2.append(tracked_neuron_unit(event=timestamps))
+                out2.append(tracked_neuron_unit(event=timestamps.rescale(pq.s)))
 
             self.state.set_data(spike_groups=(self.state.spike_groups or []) + out2)
 
