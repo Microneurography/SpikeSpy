@@ -146,6 +146,7 @@ class UnitView(QMainWindow):
     def update_curstim_line(self, stimno):
 
         idx = self.state.getUnitGroup().idx_arr[stimno]
+        self.fig.canvas.restore_region(self.blit_data)
         if stimno in self.lines:
 
             grayline = self.lines[stimno]
@@ -156,7 +157,7 @@ class UnitView(QMainWindow):
 
             # self.axes["main"].relim()
             # self.axes["main"].autoscale_view(True, True, True)
-            # self.fig.canvas.restore_region(self.blit_data)
+
         else:
             self.selected_line.set_visible(False)
         if idx is not None:
