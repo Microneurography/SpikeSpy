@@ -57,11 +57,21 @@ class SingleTraceView(QMainWindow):
         self.view = FigureCanvas(self.fig)
 
         self.toolbar = NavigationToolbar2QT(self.view, self)
-        self.ax = self.fig.add_subplot(111)
+        self.gs = self.fig.add_gridspec(2, 1, height_ratios=[1, 20], hspace=0)
+
+        self.ax = self.fig.add_subplot(self.gs[1, 0])
+        self.topax = self.fig.add_subplot(self.gs[0, 0], sharex=self.ax)
+        self.topax.yaxis.set_visible(False)
+        self.topax.xaxis.set_visible(False)
+        self.topax.spines["top"].set_visible(False)
+        self.topax.spines["left"].set_visible(False)
+        self.topax.spines["bottom"].set_visible(False)
+        self.topax.spines["right"].set_visible(False)
+
         self.addToolBar(self.toolbar)
 
         self.identified_spike_line = self.ax.axvline(
-            6000, zorder=0, visible=False, animated=True
+            6000, zorder=0, visible=False, animated=True, alpha=0.3, color="blue"
         )
         self.trace_line_cache = None
         self.scatter_peaks = None
@@ -148,16 +158,35 @@ class SingleTraceView(QMainWindow):
         else:
             self.trace_line_cache.set_data(np.arange(len(dpts)), dpts)
 
+        self.topax.clear()
+        values = [x[0] for x in sg.idx_arr if x is not None]
+        idxs = [i for i, x in enumerate(sg.idx_arr) if x is not None]
+        step = self.state.sampling_rate * 0.0005
+        bins = np.arange(0, len(dpts), step)
+        values_binned = np.histogram(values, bins=bins)
+
+        self.topax.step(values_binned[1][1:], values_binned[0], color="gray")
+        self.topax.set_ylim([1, max(values_binned[0]) + 1])
         if cur_point is not None:
             self.identified_spike_line.set_data(([cur_point[0], cur_point[0]], [0, 1]))
             self.identified_spike_line.set_visible(True)
             i = pts.searchsorted(cur_point[0])
             i2 = pts[i - 1 : i + 1]
             self.closest_pos = i2[np.argmin(np.abs(cur_point[0] - i2))]
+            self.topax.axvline(
+                cur_point[0],
+                color="blue",
+            )
 
         else:
             self.identified_spike_line.set_visible(False)
-
+        cur_idx = np.searchsorted(
+            idxs, self.state.stimno
+        )  # plot the previous and next identified spike in this group
+        if cur_idx > 0 and (idxs[cur_idx] - idxs[cur_idx - 1]) < 10:
+            self.topax.axvline(values[cur_idx - 1], color="red", alpha=0.5)
+        if cur_idx < len(idxs) and (idxs[cur_idx + 1] - idxs[cur_idx] - cur_idx) < 10:
+            self.topax.axvline(values[cur_idx + 1], color="green", alpha=0.5)
         # if self.scatter_peaks is not None:
         #     self.scatter_peaks.remove()
 
@@ -166,8 +195,12 @@ class SingleTraceView(QMainWindow):
         # self.scatter_peaks2 = self.ax.scatter(pts_down, dpts[pts_down], color="black", marker="x")
         try:
             self.fig.canvas.restore_region(self.blit_data)
-            self.ax.draw_artist(self.trace_line_cache)
             self.ax.draw_artist(self.identified_spike_line)
+            self.ax.draw_artist(self.trace_line_cache)
+
+            self.topax.redraw_in_frame()
+            # for x in self.topax.lines:
+            #     self.topax.draw_artist(x)
             self.view.update()
 
         except:
