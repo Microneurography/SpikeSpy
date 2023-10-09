@@ -75,9 +75,25 @@ class MdiView(QMainWindow):
         # 3. save the 'state' of the windows (zoom levels etc.)
         self.dock_manager.addPerspective("main")
         self.dock_manager.savePerspectives(self.settings_file)
+        class_to_str = {v: k for k, v in self.window_options.items()}
+        open_widgets = [
+            class_to_str[type(x.widget())] for x in self.dock_manager.dockWidgets()
+        ]
+        self.settings_file.setValue("main/windows", open_widgets)
 
     def loadPerspectives(self):
+        # self.settings_file.
         self.dock_manager.loadPerspectives(self.settings_file)
+        windows = self.settings_file.value("main/windows")
+        class_to_str = {v: k for k, v in self.window_options.items()}
+        open_widgets = [
+            class_to_str[type(x.widget())] for x in self.dock_manager.dockWidgets()
+        ]
+        for x in windows:
+            if x in open_widgets:
+                open_widgets.pop(open_widgets.index(x))
+                continue
+            self.newWindow(x)
         self.dock_manager.openPerspective("main")
 
     def __init__(
