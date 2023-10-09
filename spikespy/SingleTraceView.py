@@ -11,7 +11,17 @@ import quantities as pq
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qtagg import FigureCanvas, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QObject,
+    Qt,
+    Signal,
+    Slot,
+    QThread,
+    QThreadPool,
+    QRunnable,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -34,9 +44,85 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .processing import create_erp_signals
 from .ViewerState import ViewerState
 
 mplstyle.use("fast")
+
+
+class WorkerSignals(QObject):
+    result = Signal(np.ndarray)
+    cancel = Signal()
+
+
+class updateConv(QRunnable):
+    def __init__(self, analog_signal, sg, erp):
+        self.signals = WorkerSignals()
+
+        self.erp = erp
+        self.sg = sg
+        self.analog_signal = analog_signal
+        self.cancelled = False
+
+        self.signals.cancel.connect(self.cancel)
+
+        super().__init__()
+
+    def run(self):
+        self.mean_erp = np.mean(
+            create_erp_signals(
+                self.analog_signal, self.sg.event, -0.01 * pq.s, +0.02 * pq.s
+            ),
+            axis=0,
+        )
+        conv = np.convolve(
+            self.mean_erp / np.std(self.mean_erp),
+            (self.erp / np.std(self.mean_erp)).flat[:],
+            mode="same",
+        ).reshape(self.erp.shape)
+        conv[:, 0 : len(self.mean_erp)] = 0
+        conv[:, -len(self.mean_erp) :] = 0
+
+        # if not self.thread().isInterruptionRequested():
+        self.signals.result.emit(conv)
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class updateHist(QRunnable):
+    def __init__(self, analog_signal, sg, erp):
+        self.signals = WorkerSignals()
+
+        self.erp = erp
+        self.sg = sg
+        self.analog_signal = analog_signal
+        self.cancelled = False
+
+        self.signals.cancel.connect(self.cancel)
+
+        super().__init__()
+
+    def run(self):
+        self.mean_erp = np.mean(
+            create_erp_signals(
+                self.analog_signal, self.sg.event, -0.01 * pq.s, +0.02 * pq.s
+            ),
+            axis=0,
+        )
+        conv = np.convolve(
+            self.mean_erp,
+            self.erp.flat[:],
+            mode="same",
+        ).reshape(self.erp.shape)
+        conv[:, 0 : len(self.mean_erp)] = 0
+        conv[:, -len(self.mean_erp) :] = 0
+
+        # if not self.thread().isInterruptionRequested():
+        self.signals.result.emit(conv)
+
+    def cancel(self):
+        self.cancelled = True
 
 
 class SingleTraceView(QMainWindow):
@@ -57,7 +143,7 @@ class SingleTraceView(QMainWindow):
         self.view = FigureCanvas(self.fig)
 
         self.toolbar = NavigationToolbar2QT(self.view, self)
-        self.gs = self.fig.add_gridspec(2, 1, height_ratios=[1, 20], hspace=0)
+        self.gs = self.fig.add_gridspec(2, 1, height_ratios=[1, 15], hspace=0)
 
         self.ax = self.fig.add_subplot(self.gs[1, 0])
         self.topax = self.fig.add_subplot(self.gs[0, 0], sharex=self.ax)
@@ -104,6 +190,9 @@ class SingleTraceView(QMainWindow):
 
         self.fig.canvas.mpl_connect("draw_event", draw_evt)
         self.topax_lines = []
+
+        self.task = None
+        self.conv = None
         self.setupFigure()
 
     @Slot()
@@ -146,6 +235,11 @@ class SingleTraceView(QMainWindow):
 
         self.view.draw_idle()
 
+    @Slot(np.ndarray)
+    def updateThreadDone(self, x):
+        self.conv = x
+        self.updateFigure()
+
     def updateHistogram(self):
         sg = self.state.getUnitGroup()
         self.topax.clear()
@@ -156,6 +250,16 @@ class SingleTraceView(QMainWindow):
         )
         values_binned = np.histogram(values, bins=bins)
 
+        if self.task is not None:
+            self.task.signals.cancel.emit()
+        # if self.updateThread.isRunning():
+        #   self.updateThread.requestInterruption()
+
+        self.task = updateConv(self.state.analog_signal, sg, self.state.get_erp())
+        self.task.signals.result.connect(self.updateThreadDone)
+
+        QThreadPool.globalInstance().start(self.task)
+
         self.topax.step(values_binned[1][1:], values_binned[0], color="gray")
         self.topax.set_ylim([1, max(values_binned[0]) + 1])
         self.topax.redraw_in_frame()
@@ -165,6 +269,7 @@ class SingleTraceView(QMainWindow):
     def updateFigure(self):
         sg = self.state.getUnitGroup()
         dpts = self.state.get_erp()[self.state.stimno]  # this should only happen once.
+
         pts, _ = find_peaks(dpts)
         pts_down, _ = find_peaks(-1 * dpts)
         pts = np.sort(np.hstack([pts, pts_down]).flatten())
@@ -215,6 +320,22 @@ class SingleTraceView(QMainWindow):
                     values[cur_idx + 1], color="red", alpha=0.5, animated=True
                 )
             )
+
+        if self.conv is not None:
+            conv = self.conv[self.state.stimno]
+            conv_high = np.percentile(conv[1000:-1000], 99)
+            highlight = find_peaks(conv, conv_high)
+            hl = highlight[0][np.argsort(conv[highlight[0]])[::-1]]
+            for x in hl:
+                self.topax_lines.append(
+                    self.topax.axvline(
+                        x,
+                        color="gold",
+                        ls="--",
+                        animated=True,
+                        alpha=0.3,
+                    )
+                )
 
         # if self.scatter_peaks is not None:
         #     self.scatter_peaks.remove()
