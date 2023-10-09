@@ -360,7 +360,17 @@ class MdiView(QMainWindow):
 
     def newWindow(self, k, pos=QtAds.TopDockWidgetArea):
         w = self.window_options[k](parent=self, state=self.state)
-        w2 = QtAds.CDockWidget(k)
+        window_no = len(
+            [
+                x
+                for x in self.dock_manager.dockWidgets()
+                if isinstance(x.widget(), self.window_options[k])
+            ]
+        )
+        k2 = k
+        if window_no > 0:
+            k2 += f" {window_no}"
+        w2 = QtAds.CDockWidget(k2)
         w2.setWidget(w)
         w2.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, True)
         self.dock_manager.addDockWidget(QtAds.NoDockWidgetArea, w2)
