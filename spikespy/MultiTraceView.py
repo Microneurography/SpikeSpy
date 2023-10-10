@@ -227,11 +227,11 @@ class MultiTraceView(QMainWindow):
         self.addToolBar(self.toolbar)
         layout = QVBoxLayout()
         self.lowerSpinBox = QSpinBox(self)
-        self.lowerSpinBox.setRange(1, 99)
+        self.lowerSpinBox.setRange(0, 99)
         self.lowerSpinBox.valueChanged.connect(lambda x: self.updateAll())
 
         self.upperSpinBox = QSpinBox(self)
-        self.upperSpinBox.setRange(1, 99)
+        self.upperSpinBox.setRange(0, 99)
         self.upperSpinBox.setValue(95)
         self.lowerSpinBox.valueChanged.connect(self.upperSpinBox.setMinimum)
         self.upperSpinBox.valueChanged.connect(self.lowerSpinBox.setMaximum)
@@ -327,6 +327,36 @@ class MultiTraceView(QMainWindow):
             lambda *args: self.toggle_polySelector(False)
         )
 
+    def get_settings(self):
+        return {
+            "xlim": self.ax.get_xlim(),
+            "yrange": np.diff(self.ax.get_ylim()),
+            "mode": self.mode,
+            "include_all_units": self.includeAllUnitsCheckBox.isChecked(),
+            "lock_to_stim": self.lock_to_stim,
+            "percentiles": (self.lowerSpinBox.value(), self.upperSpinBox.value()),
+        }
+
+    def set_settings(self, values):
+        if "xlim" in values:
+            self.ax.set_xlim(values["xlim"])
+        if "mode" in values:
+            self.mode = values["mode"]
+        if "include_all_units" in values:
+            self.includeAllUnitsCheckBox.setChecked(values["include_all_units"])
+        if "lock_to_stim" in values:
+            self.lock_to_stim = values["lock_to_stim"]
+            self.lock_to_stimCheckBox.setChecked(values["lock_to_stim"])
+        if "percentiles" in values:
+            self.lowerSpinBox.setValue(values["percentiles"][0])
+            self.upperSpinBox.setValue(values["percentiles"][1])
+        if "yrange" in values:
+            # cur= self.ax.get_ylim()[0]
+            cur = max(self.state.stimno - np.abs(values["yrange"]) // 2, 0)
+            self.ax.set_ylim(cur + np.abs(values["yrange"]), cur)
+
+        self.setup_figure()
+
     def polySelect(self):
         """
         create new event based on the lineSelector
@@ -391,15 +421,15 @@ class MultiTraceView(QMainWindow):
         self.state = state
         self.state.onLoadNewFile.connect(self.reset_right_axes_data)
         self.state.onLoadNewFile.connect(self.setup_figure)
+        self.state.onLoadNewFile.connect(self.update_axis)
+
         self.state.onUnitGroupChange.connect(lambda *args: self.render())
         self.state.onUnitChange.connect(lambda *args: self.render())
+        self.state.onUnitGroupChange.connect(lambda *args: self.reset_right_axes_data())
 
         self.state.onStimNoChange.connect(self.update_ylim)
         self.state.onStimNoChange.connect(lambda *args: self.render())
 
-        self.state.onLoadNewFile.connect(self.update_axis)
-
-        self.state.onUnitGroupChange.connect(lambda *args: self.reset_right_axes_data())
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
 
@@ -467,9 +497,13 @@ class MultiTraceView(QMainWindow):
                 np.abs(self.state.get_erp()),
                 aspect="auto",
                 cmap="gray_r",
-                clim=(self.percentiles[40], self.percentiles[95]),
+                clim=(
+                    self.percentiles[self.lowerSpinBox.value()],
+                    self.percentiles[self.upperSpinBox.value()],
+                ),
                 interpolation="antialiased",  # slows down render (i suspect)
             )
+
         elif mode == "lines":
 
             p90 = self.percentiles[95] * 4
@@ -539,22 +573,55 @@ class MultiTraceView(QMainWindow):
             w = max(abs(cur_lims[1] - cur_lims[0]) // 2, 2)
             self.ax.set_ylim(curStim + w, curStim - w)
             # self.view.update()
+            # self.view.draw_idle()
             self.view.draw()
+            # self.view.update()
 
     def update_axis(self):  # TODO: plot these data using x as the time in millis.
         if self.state is None:
             return
         if self.state.analog_signal is None:
             return
-        func_formatter = matplotlib.ticker.FuncFormatter(
-            lambda x, pos: "{0:g}".format(1000 * x / self.state.sampling_rate)
-        )
+
+        class CustomFormatter(matplotlib.ticker.Formatter):
+            def __init__(self, ax, func):
+                super().__init__()
+                self.set_axis(ax)
+                self.func = func
+
+            def __call__(self, x, pos=None):
+                # Find the axis range
+                vmin, vmax = self.axis.get_view_interval()
+                major_locs = [
+                    x
+                    for x in self.axis.get_major_locator().tick_values(vmin, vmax)
+                    if vmin <= x and x <= vmax
+                ]
+                if len(major_locs) >= 2:
+                    return ""
+                return self.func(
+                    x, pos
+                )  # "{0:g}".format(1000 * x / self.state.sampling_rate)
+
+        func = lambda x, pos: "{0:g}".format(1000 * x / self.state.sampling_rate)
+        func_formatter = matplotlib.ticker.FuncFormatter(func)
 
         self.ax.xaxis.set_major_formatter(func_formatter)
-        loc = matplotlib.ticker.MultipleLocator(
-            base=self.state.sampling_rate / 100
-        )  # this locator puts ticks at regular intervals
+        self.ax.xaxis.set_minor_formatter(CustomFormatter(self.ax, func))
+        # loc = matplotlib.ticker.MaxNLocator(
+        #     steps=[1, 5, 10],
+        # )  # this locator puts ticks at regular intervals
+        loc = matplotlib.ticker.MultipleLocator(self.state.sampling_rate / 10)
         self.ax.xaxis.set_major_locator(loc)
+        loc = matplotlib.ticker.MultipleLocator(self.state.sampling_rate / 100)
+        self.ax.xaxis.set_minor_locator(loc)
+
+        self.ax.xaxis.set_major_formatter(func_formatter)
+
+        # loc = matplotlib.ticker.MultipleLocator(
+        #     base=self.state.sampling_rate / 100
+        # )  # this locator puts ticks at regular intervals
+        # self.ax.xaxis.set_major_locator(loc)
         # self.ax.set_xticks(
         #     np.arange(
         #         0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 100

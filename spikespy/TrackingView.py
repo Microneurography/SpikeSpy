@@ -88,9 +88,9 @@ class TrackingView(QMainWindow):
     def updateThresholdFromUnit(self):
         if self.state is None:
             return
-        unit_events = self.state.getUnitGroup().event
+        unit_events = self.state.getUnitGroup().event.rescale(pq.s)
         last_event = unit_events.searchsorted(
-            self.state.event_signal[self.state.stimno] + (0.5 * pq.s)
+            (self.state.event_signal[self.state.stimno] + (0.5 * pq.s)).rescale(pq.s)
         )  # find the most recent event
 
         starting_time = unit_events[max(last_event - 1, 0)]
@@ -103,9 +103,9 @@ class TrackingView(QMainWindow):
         self.qsb_threshold.setValue(threshold)
 
     def trackUnit(self):
-        unit_events = self.state.getUnitGroup().event
+        unit_events = self.state.getUnitGroup().event.rescale(pq.s)
         last_event = unit_events.searchsorted(
-            self.state.event_signal[self.state.stimno] + (0.5 * pq.s)
+            (self.state.event_signal[self.state.stimno] + (0.5 * pq.s)).rescale(pq.s)
         )  # find the most recent event
 
         starting_time = unit_events[max(last_event - 1, 0)]

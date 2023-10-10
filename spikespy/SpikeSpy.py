@@ -13,9 +13,18 @@ import neo
 import numpy as np
 import PySide6
 import quantities as pq
+import logging
 from matplotlib.widgets import PolygonSelector
 from neo.io import NixIO
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QObject,
+    Qt,
+    Signal,
+    Slot,
+    QSettings,
+)
 from PySide6.QtGui import QAction, QColor, QShortcut, QKeySequence, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -60,6 +69,54 @@ class MdiView(QMainWindow):
     # signals
     loadFile = Signal(str, str)
 
+    def savePerspectives(self):
+        logging.info(f"using settings file: {self.settings_file.fileName()}")
+        self.dock_manager.addPerspective("main")
+        self.settings_file.beginGroup("view")
+        self.dock_manager.savePerspectives(self.settings_file)
+        class_to_str = {v: k for k, v in self.window_options.items()}
+        open_widgets = [x for x in self.dock_manager.dockWidgets()]
+        self.settings_file.beginWriteArray("window", len(open_widgets))
+        for i, x in enumerate(open_widgets):
+            self.settings_file.setArrayIndex(i)
+            self.settings_file.setValue("name", x.windowTitle())
+            self.settings_file.setValue("class", class_to_str[type(x.widget())])
+            try:
+                settings = x.widget().get_settings()
+            except:
+                settings = {}
+            self.settings_file.setValue("settings", settings)
+
+        self.settings_file.endArray()
+        self.settings_file.endGroup()
+
+    def loadPerspectives(self):
+        # self.settings_file.
+
+        self.settings_file.beginGroup("view")
+        # TODO: Not sure, perhaps closing all open windows is the most rational.
+        # class_to_str = {v: k for k, v in self.window_options.items()}
+        # open_widgets = [
+        #     class_to_str[type(x.widget())] for x in self.dock_manager.dockWidgets()
+        # ]
+        logging.info(f"using settings file: {self.settings_file.fileName()}")
+        self.dock_manager.loadPerspectives(self.settings_file)
+        for x in range(self.settings_file.beginReadArray("window")):
+            self.settings_file.setArrayIndex(x)
+            w = self.newWindow(
+                self.settings_file.value("class"), name=self.settings_file.value("name")
+            )
+            settings = self.settings_file.value("settings")
+            try:
+                w.set_settings(settings)
+            except:
+                pass
+        self.settings_file.endArray()
+
+        self.settings_file.endGroup()
+
+        self.dock_manager.openPerspective("main")
+
     def __init__(
         self,
         parent: PySide6.QtWidgets.QWidget = None,
@@ -67,6 +124,9 @@ class MdiView(QMainWindow):
         **kwargs,
     ) -> None:
         super().__init__(parent)
+        self.settings_file = QSettings(
+            QSettings.Format.IniFormat, QSettings.Scope.UserScope, "spikespy"
+        )
 
         self.window_options = {
             # 'TraceAnnotation': TraceView,
@@ -92,6 +152,7 @@ class MdiView(QMainWindow):
             )
         )
         self.dock_manager = QtAds.CDockManager(self)
+        self.dock_manager.addPerspective("main")
         self.mdi = QMdiArea()
         # self.setCentralWidget(self.mdi)
 
@@ -145,6 +206,12 @@ class MdiView(QMainWindow):
             QAction(
                 "undo", self, shortcut="Ctrl+Z", triggered=lambda: self.state.undo()
             )
+        )
+        edit_menu.addAction(
+            QAction("save perspective", self, triggered=self.savePerspectives)
+        )
+        edit_menu.addAction(
+            QAction("load perspective", self, triggered=self.loadPerspectives)
         )
 
         # key shortcuts
@@ -311,18 +378,32 @@ class MdiView(QMainWindow):
                 timestamps = neo.Event(
                     np.array(v, dtype=np.float64), units=unit, name=f"unit_{k}"
                 )
-                out2.append(tracked_neuron_unit(event=timestamps))
+                out2.append(tracked_neuron_unit(event=timestamps.rescale(pq.s)))
 
             self.state.set_data(spike_groups=(self.state.spike_groups or []) + out2)
 
-    def newWindow(self, k, pos=QtAds.TopDockWidgetArea):
+    def newWindow(self, k, pos=QtAds.TopDockWidgetArea, name=None):
+        # TODO: this needs to be smarter. window names must be unique for perspectives. need to be able to recreate old windows by name
+
         w = self.window_options[k](parent=self, state=self.state)
-        w2 = QtAds.CDockWidget(k)
+        window_no = len(
+            [
+                x
+                for x in self.dock_manager.dockWidgets()
+                if isinstance(x.widget(), self.window_options[k])
+            ]
+        )
+
+        if name is None:
+            name = k + (f" {window_no}" if window_no > 0 else "")
+
+        w2 = QtAds.CDockWidget(name)
         w2.setWidget(w)
         w2.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, True)
         self.dock_manager.addDockWidget(QtAds.NoDockWidgetArea, w2)
         self.cur_windows.append(w2)
         w2.show()
+        return w
 
     @Slot()
     def open(self, type=None):
