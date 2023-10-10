@@ -125,6 +125,11 @@ class updateHist(QRunnable):
         self.cancelled = True
 
 
+from matplotlib.ticker import Formatter
+
+# Custom formatter class
+
+
 class SingleTraceView(QMainWindow):
     def __init__(
         self,
@@ -143,7 +148,7 @@ class SingleTraceView(QMainWindow):
         self.view = FigureCanvas(self.fig)
 
         self.toolbar = NavigationToolbar2QT(self.view, self)
-        self.gs = self.fig.add_gridspec(2, 1, height_ratios=[1, 15], hspace=0)
+        self.gs = self.fig.add_gridspec(2, 1, height_ratios=[1, 10], hspace=0)
 
         self.ax = self.fig.add_subplot(self.gs[1, 0])
         self.topax = self.fig.add_subplot(self.gs[0, 0], sharex=self.ax)
@@ -153,7 +158,9 @@ class SingleTraceView(QMainWindow):
         self.topax.spines["left"].set_visible(False)
         self.topax.spines["bottom"].set_visible(False)
         self.topax.spines["right"].set_visible(False)
+        self.topax.set_ylim(0, 1)
 
+        self.fig.tight_layout()
         self.addToolBar(self.toolbar)
 
         self.identified_spike_line = self.ax.axvline(
@@ -201,7 +208,7 @@ class SingleTraceView(QMainWindow):
             return
 
         if e.inaxes == self.ax:
-            self.set_cur_pos(e.xdata)
+            self.set_cur_pos(e.xdata * self.state.sampling_rate)
 
     @Slot()
     def setupFigure(self):
@@ -211,29 +218,60 @@ class SingleTraceView(QMainWindow):
             return
 
         self.ax.grid(True, which="both")
-
         if self.trace_line_cache is not None:
             self.trace_line_cache.remove()
             self.trace_line_cache = None
 
-        self.fig.tight_layout()
         erp = self.state.get_erp()
-        self.ax.set_xlim(0, erp.shape[-1], emit=False)
+        self.ax.set_xlim(0, erp.shape[-1] / self.state.sampling_rate)
         ylim = np.std(np.abs(erp)) * 8
         self.ax.set_ylim(-ylim, ylim)
 
+        class CustomFormatter(Formatter):
+            def __init__(self, ax: Any):
+                super().__init__()
+                self.set_axis(ax)
+
+            def __call__(self, x, pos=None):
+                # Find the axis range
+                vmin, vmax = self.axis.get_view_interval()
+                major_locs = [
+                    x
+                    for x in self.axis.get_major_locator().tick_values(vmin, vmax)
+                    if vmin <= x and x <= vmax
+                ]
+                if len(major_locs) >= 2:
+                    return ""
+                return "{0:g}".format(1000 * x)
+                # tl = [
+                #     x
+                #     for x in self.axis.get_minor_locator().tick_values(vmin, vmax)
+                #     if vmin <= x and x <= vmax
+                # ]
+
+                # if x == tl[0] or x == tl[-1]:
+                #     return "{0:g}".format(1000 * x)
+
+                # return ""
+
         func_formatter = matplotlib.ticker.FuncFormatter(
-            lambda x, pos: "{0:g}ms".format(1000 * x / self.state.sampling_rate)
+            lambda x, pos: "{0:g}".format(1000 * x)
         )
         self.ax.xaxis.set_major_formatter(func_formatter)
-        loc = matplotlib.ticker.MultipleLocator(
-            base=self.state.sampling_rate / 100
-        )  # this locator puts ticks at regular intervals
+        self.ax.xaxis.set_minor_formatter(CustomFormatter(self.ax))
+        # loc = matplotlib.ticker.MaxNLocator(
+        #     steps=[1, 5, 10],
+        # )  # this locator puts ticks at regular intervals
+        loc = matplotlib.ticker.MultipleLocator(0.05)
         self.ax.xaxis.set_major_locator(loc)
+        loc = matplotlib.ticker.MultipleLocator(0.01)
+        self.ax.xaxis.set_minor_locator(loc)
 
+        self.view.draw()
+        self.view.update()
+        self.toolbar.set_history_buttons()
+        self.step = None
         self.updateHistogram()
-
-        self.view.draw_idle()
 
     def get_settings(self):
         return {"xlim": self.ax.get_xlim()}
@@ -249,7 +287,9 @@ class SingleTraceView(QMainWindow):
 
     def updateHistogram(self):
         sg = self.state.getUnitGroup()
-        self.topax.clear()
+        if self.step is not None:
+            self.step[0].remove()
+
         values = [x[0] for x in sg.idx_arr if x is not None]
         step = self.state.sampling_rate * 0.0005
         bins = np.arange(
@@ -267,9 +307,14 @@ class SingleTraceView(QMainWindow):
 
         QThreadPool.globalInstance().start(self.task)
 
-        self.topax.step(values_binned[1][1:], values_binned[0], color="gray")
-        self.topax.set_ylim([1, max(values_binned[0]) + 1])
+        self.step = self.topax.step(
+            values_binned[1][1:] / self.state.sampling_rate,
+            values_binned[0] / max(values_binned[0]),
+            color="gray",
+        )
+
         self.topax.redraw_in_frame()
+
         self.blit_data_topax = self.fig.canvas.copy_from_bbox(self.topax.bbox)
 
     @Slot()
@@ -282,25 +327,39 @@ class SingleTraceView(QMainWindow):
         pts = np.sort(np.hstack([pts, pts_down]).flatten())
         cur_point = sg.idx_arr[self.state.stimno]
         if self.trace_line_cache is None:
-            self.trace_line_cache = self.ax.plot(dpts, color="purple")[0]
+            self.trace_line_cache = self.ax.plot(
+                np.arange(len(dpts)) / self.state.sampling_rate, dpts, color="purple"
+            )[0]
             self.trace_line_cache.set_animated(True)
         else:
-            self.trace_line_cache.set_data(np.arange(len(dpts)), dpts)
+            self.trace_line_cache.set_data(
+                np.arange(len(dpts)) / self.state.sampling_rate, dpts
+            )
 
         idxs = [i for i, x in enumerate(sg.idx_arr) if x is not None]
-        values = [x[0] for x in sg.idx_arr if x is not None]
+        values = [x[0] / self.state.sampling_rate for x in sg.idx_arr if x is not None]
         for x in self.topax_lines:
             x.remove()
             del x
         self.topax_lines = []
         if cur_point is not None:
-            self.identified_spike_line.set_data(([cur_point[0], cur_point[0]], [0, 1]))
+            self.identified_spike_line.set_data(
+                (
+                    [
+                        cur_point[0] / self.state.sampling_rate,
+                        cur_point[0] / self.state.sampling_rate,
+                    ],
+                    [0, 1],
+                )
+            )
             self.identified_spike_line.set_visible(True)
             i = pts.searchsorted(cur_point[0])
             i2 = pts[i - 1 : i + 1]
             self.closest_pos = i2[np.argmin(np.abs(cur_point[0] - i2))]
             self.topax_lines.append(
-                self.topax.axvline(cur_point[0], color="blue", animated=True)
+                self.topax.axvline(
+                    cur_point[0] / self.state.sampling_rate, color="blue", animated=True
+                )
             )
 
         else:
@@ -336,7 +395,7 @@ class SingleTraceView(QMainWindow):
             for x in hl:
                 self.topax_lines.append(
                     self.topax.axvline(
-                        x,
+                        x / self.state.sampling_rate,
                         color="gold",
                         ls="--",
                         animated=True,

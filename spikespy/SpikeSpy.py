@@ -13,6 +13,7 @@ import neo
 import numpy as np
 import PySide6
 import quantities as pq
+import logging
 from matplotlib.widgets import PolygonSelector
 from neo.io import NixIO
 from PySide6.QtCore import (
@@ -69,10 +70,7 @@ class MdiView(QMainWindow):
     loadFile = Signal(str, str)
 
     def savePerspectives(self):
-        # TODO: this currently works if all the required window titles are open. need to:
-        # 1. create unique window names
-        # 2. save the details of the windows to reopen
-        # 3. save the 'state' of the windows (zoom levels etc.)
+        logging.info(f"using settings file: {self.settings_file.fileName()}")
         self.dock_manager.addPerspective("main")
         self.settings_file.beginGroup("view")
         self.dock_manager.savePerspectives(self.settings_file)
@@ -101,7 +99,7 @@ class MdiView(QMainWindow):
         # open_widgets = [
         #     class_to_str[type(x.widget())] for x in self.dock_manager.dockWidgets()
         # ]
-
+        logging.info(f"using settings file: {self.settings_file.fileName()}")
         self.dock_manager.loadPerspectives(self.settings_file)
         for x in range(self.settings_file.beginReadArray("window")):
             self.settings_file.setArrayIndex(x)
@@ -126,7 +124,10 @@ class MdiView(QMainWindow):
         **kwargs,
     ) -> None:
         super().__init__(parent)
-        self.settings_file = QSettings("spikespy.ini", QSettings.Format.IniFormat)
+        self.settings_file = QSettings(
+            QSettings.Format.IniFormat, QSettings.Scope.UserScope, "spikespy"
+        )
+
         self.window_options = {
             # 'TraceAnnotation': TraceView,
             "MultiTrace": MultiTraceView,
