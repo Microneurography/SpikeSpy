@@ -582,15 +582,46 @@ class MultiTraceView(QMainWindow):
             return
         if self.state.analog_signal is None:
             return
-        func_formatter = matplotlib.ticker.FuncFormatter(
-            lambda x, pos: "{0:g}".format(1000 * x / self.state.sampling_rate)
-        )
+
+        class CustomFormatter(matplotlib.ticker.Formatter):
+            def __init__(self, ax, func):
+                super().__init__()
+                self.set_axis(ax)
+                self.func = func
+
+            def __call__(self, x, pos=None):
+                # Find the axis range
+                vmin, vmax = self.axis.get_view_interval()
+                major_locs = [
+                    x
+                    for x in self.axis.get_major_locator().tick_values(vmin, vmax)
+                    if vmin <= x and x <= vmax
+                ]
+                if len(major_locs) >= 2:
+                    return ""
+                return self.func(
+                    x, pos
+                )  # "{0:g}".format(1000 * x / self.state.sampling_rate)
+
+        func = lambda x, pos: "{0:g}".format(1000 * x / self.state.sampling_rate)
+        func_formatter = matplotlib.ticker.FuncFormatter(func)
 
         self.ax.xaxis.set_major_formatter(func_formatter)
-        loc = matplotlib.ticker.MultipleLocator(
-            base=self.state.sampling_rate / 100
-        )  # this locator puts ticks at regular intervals
+        self.ax.xaxis.set_minor_formatter(CustomFormatter(self.ax, func))
+        # loc = matplotlib.ticker.MaxNLocator(
+        #     steps=[1, 5, 10],
+        # )  # this locator puts ticks at regular intervals
+        loc = matplotlib.ticker.MultipleLocator(self.state.sampling_rate / 10)
         self.ax.xaxis.set_major_locator(loc)
+        loc = matplotlib.ticker.MultipleLocator(self.state.sampling_rate / 100)
+        self.ax.xaxis.set_minor_locator(loc)
+
+        self.ax.xaxis.set_major_formatter(func_formatter)
+
+        # loc = matplotlib.ticker.MultipleLocator(
+        #     base=self.state.sampling_rate / 100
+        # )  # this locator puts ticks at regular intervals
+        # self.ax.xaxis.set_major_locator(loc)
         # self.ax.set_xticks(
         #     np.arange(
         #         0, self.state.analog_signal_erp.shape[1], self.state.sampling_rate / 100

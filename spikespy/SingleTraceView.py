@@ -148,7 +148,7 @@ class SingleTraceView(QMainWindow):
         self.view = FigureCanvas(self.fig)
 
         self.toolbar = NavigationToolbar2QT(self.view, self)
-        self.gs = self.fig.add_gridspec(2, 1, height_ratios=[1, 10], hspace=0)
+        self.gs = self.fig.add_gridspec(2, 1, height_ratios=[1, 5], hspace=0)
 
         self.ax = self.fig.add_subplot(self.gs[1, 0])
         self.topax = self.fig.add_subplot(self.gs[0, 0], sharex=self.ax)
