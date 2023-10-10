@@ -291,10 +291,16 @@ class SingleTraceView(QMainWindow):
             self.step[0].remove()
 
         values = [x[0] for x in sg.idx_arr if x is not None]
+
         step = self.state.sampling_rate * 0.0005
-        bins = np.arange(
-            np.floor((min(values) // step)) * step, np.ceil(max(values) + step), step
-        )
+        if len(values) == 0:
+            return
+        else:
+            bins = np.arange(
+                np.floor((min(values) // step)) * step,
+                np.ceil(max(values) + step),
+                step,
+            )
         values_binned = np.histogram(values, bins=bins)
 
         if self.task is not None:
