@@ -74,26 +74,49 @@ class MdiView(QMainWindow):
         # 2. save the details of the windows to reopen
         # 3. save the 'state' of the windows (zoom levels etc.)
         self.dock_manager.addPerspective("main")
+        self.settings_file.beginGroup("view")
         self.dock_manager.savePerspectives(self.settings_file)
         class_to_str = {v: k for k, v in self.window_options.items()}
-        open_widgets = [
-            class_to_str[type(x.widget())] for x in self.dock_manager.dockWidgets()
-        ]
-        self.settings_file.setValue("main/windows", open_widgets)
+        open_widgets = [x for x in self.dock_manager.dockWidgets()]
+        self.settings_file.beginWriteArray("window", len(open_widgets))
+        for i, x in enumerate(open_widgets):
+            self.settings_file.setArrayIndex(i)
+            self.settings_file.setValue("name", x.windowTitle())
+            self.settings_file.setValue("class", class_to_str[type(x.widget())])
+            try:
+                settings = x.widget().get_settings()
+            except:
+                settings = {}
+            self.settings_file.setValue("settings", settings)
+
+        self.settings_file.endArray()
+        self.settings_file.endGroup()
 
     def loadPerspectives(self):
         # self.settings_file.
+
+        self.settings_file.beginGroup("view")
+        # TODO: Not sure, perhaps closing all open windows is the most rational.
+        # class_to_str = {v: k for k, v in self.window_options.items()}
+        # open_widgets = [
+        #     class_to_str[type(x.widget())] for x in self.dock_manager.dockWidgets()
+        # ]
+
         self.dock_manager.loadPerspectives(self.settings_file)
-        windows = self.settings_file.value("main/windows")
-        class_to_str = {v: k for k, v in self.window_options.items()}
-        open_widgets = [
-            class_to_str[type(x.widget())] for x in self.dock_manager.dockWidgets()
-        ]
-        for x in windows:
-            if x in open_widgets:
-                open_widgets.pop(open_widgets.index(x))
-                continue
-            self.newWindow(x)
+        for x in range(self.settings_file.beginReadArray("window")):
+            self.settings_file.setArrayIndex(x)
+            w = self.newWindow(
+                self.settings_file.value("class"), name=self.settings_file.value("name")
+            )
+            settings = self.settings_file.value("settings")
+            try:
+                w.set_settings(settings)
+            except:
+                pass
+        self.settings_file.endArray()
+
+        self.settings_file.endGroup()
+
         self.dock_manager.openPerspective("main")
 
     def __init__(
@@ -358,7 +381,9 @@ class MdiView(QMainWindow):
 
             self.state.set_data(spike_groups=(self.state.spike_groups or []) + out2)
 
-    def newWindow(self, k, pos=QtAds.TopDockWidgetArea):
+    def newWindow(self, k, pos=QtAds.TopDockWidgetArea, name=None):
+        # TODO: this needs to be smarter. window names must be unique for perspectives. need to be able to recreate old windows by name
+
         w = self.window_options[k](parent=self, state=self.state)
         window_no = len(
             [
@@ -367,15 +392,17 @@ class MdiView(QMainWindow):
                 if isinstance(x.widget(), self.window_options[k])
             ]
         )
-        k2 = k
-        if window_no > 0:
-            k2 += f" {window_no}"
-        w2 = QtAds.CDockWidget(k2)
+
+        if name is None:
+            name = k + (f" {window_no}" if window_no > 0 else "")
+
+        w2 = QtAds.CDockWidget(name)
         w2.setWidget(w)
         w2.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, True)
         self.dock_manager.addDockWidget(QtAds.NoDockWidgetArea, w2)
         self.cur_windows.append(w2)
         w2.show()
+        return w
 
     @Slot()
     def open(self, type=None):

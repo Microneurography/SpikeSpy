@@ -235,6 +235,13 @@ class SingleTraceView(QMainWindow):
 
         self.view.draw_idle()
 
+    def get_settings(self):
+        return {"xlim": self.ax.get_xlim()}
+
+    def set_settings(self, values):
+        if "xlim" in values:
+            self.ax.set_xlim(values["xlim"])
+
     @Slot(np.ndarray)
     def updateThreadDone(self, x):
         self.conv = x
