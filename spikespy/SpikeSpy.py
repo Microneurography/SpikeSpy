@@ -47,6 +47,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QMessageBox,
+    QScrollArea,
+    QTextEdit,
+    QLabel,
 )
 
 # import PySide6QtAds as QtAds
@@ -140,9 +143,10 @@ class MdiView(QMainWindow):
             "Events": EventView,
         }
         self.cur_windows = []
-        import pkg_resources
 
-        version = pkg_resources.get_distribution("spikespy").version
+        from importlib.metadata import version as get_version
+
+        version = get_version("spikespy")
         self.setWindowTitle(f"SpikeSpy - {version}")
         self.state = state or ViewerState(**kwargs)
         self.loadFile.connect(self.state.loadFile)
@@ -213,6 +217,15 @@ class MdiView(QMainWindow):
         edit_menu.addAction(
             QAction("load perspective", self, triggered=self.loadPerspectives)
         )
+
+        help_menu = self.menubar.addMenu("Help")
+        help_menu.addAction("check for updates")
+
+        def showInfo():
+            info = InfoDialog()
+            info.exec()
+
+        help_menu.addAction(QAction("About", self, triggered=showInfo))
 
         # key shortcuts
         self.profiler = cProfile.Profile()
@@ -504,14 +517,6 @@ def save_file(
     n.close()
 
 
-class EventHistoryView(QWidget):
-    """
-    #TODO: should show the recent history of the selected spike (in table?)
-    """
-
-    pass
-
-
 def align_spikegroup(spikegroup, erp_arr):
     """given a spike group attempt to align using convolution - note this should go outside of the UI component"""
     # 1. get spike events as 2d matrix
@@ -545,6 +550,43 @@ def run():
     # w = SpikeGroupView()
     w.showMaximized()
     sys.exit(app.exec())
+
+
+from importlib.metadata import version, metadata, packages_distributions
+
+
+class InfoDialog(QDialog):
+    # show license info and about
+
+    def __init__(self):
+        super().__init__()
+        # self.textwidget = QScrollArea()
+        self.textarea = QTextEdit()
+
+        self.license_text = self.buid_licence_text()
+        self.textarea.setText(self.license_text)
+        # self.textwidget.setWidget(self.textarea)
+        lo = QVBoxLayout()
+        self.setLayout(lo)
+
+        lo.addWidget(QLabel("SpikeSpy"))
+        lo.addWidget(QLabel("Open source packages & licenses"))
+        lo.addWidget(self.textarea)
+
+    def buid_licence_text(self):
+        out = ""
+        packages = sorted(list(set(sum(packages_distributions().values(), []))))
+        for x in packages:
+            md = metadata(x)
+            out += f"""## {md.get("name")}
+            """
+            for k in ["version", "author", "license", "Project-URL"]:
+                if k not in md:
+                    continue
+                out += f"\n{k}: {md.get(k)}"
+
+            out += "\n\n"
+        return out
 
 
 if __name__ == "__main__":
