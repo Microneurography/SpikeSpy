@@ -288,7 +288,11 @@ class SingleTraceView(QMainWindow):
     def updateHistogram(self):
         sg = self.state.getUnitGroup()
         if self.step is not None:
-            self.step[0].remove()
+            try:
+                self.step[0].remove()
+                del self.step
+            except:
+                pass
 
         values = [x[0] for x in sg.idx_arr if x is not None]
 
