@@ -200,6 +200,7 @@ class SingleTraceView(QMainWindow):
 
         self.task = None
         self.conv = None
+        self.step =None
         self.setupFigure()
 
     @Slot()
@@ -290,7 +291,7 @@ class SingleTraceView(QMainWindow):
         if self.step is not None:
             try:
                 self.step[0].remove()
-                del self.step
+                self.step = None
             except:
                 pass
 

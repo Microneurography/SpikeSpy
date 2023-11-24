@@ -42,14 +42,14 @@ class EventSelectorModel(ListModel):
 class EventViewTableModel(QAbstractTableModel):
     def __init__(self, parent=None, event: Event = None) -> None:
         super().__init__(parent)
-        self.event = event or []
+        self.event:neo.Event = event or []
         self.keys = [] if event is None else event.array_annotations.keys
 
     def rowCount(self, parent):
         return len(self.event)
 
     def columnCount(self, parent):
-        return len(self.keys) + 1
+        return len(self.keys) + 2
 
     def headerData(self, section, orientation, role):
         if role != Qt.DisplayRole:
@@ -57,7 +57,9 @@ class EventViewTableModel(QAbstractTableModel):
         if orientation == Qt.Horizontal:
             if section == 0:
                 return "timestamp"
-            return self.keys[section - 1]
+            if section == 1:
+                return "label"
+            return self.keys[section - 2]
         else:
             return f"{section}"
 
@@ -66,12 +68,17 @@ class EventViewTableModel(QAbstractTableModel):
             ld: Event = self.event[index.row()]
             if index.column() == 0:  # if the first index return the timestamp
                 return f"{ld:.2f}"
+            if index.column() == 1: # if second use the "label"
+                if len(self.event.labels) >0:
+                    return self.event.labels[index.row()]
+                else:
+                    return ""
 
-            val = self.event.array_annotations[self.keys[index.column() - 1]][
+            val = self.event.array_annotations[self.keys[index.column() - 2]][
                 index.row()
             ]
             try:
-                return f"{val:.2f}"
+                return f"{val:.3f}"
             except:
                 return val
 
@@ -122,10 +129,10 @@ class EventView(QtWidgets.QWidget):
             self.onStimNoChange
         )
         self.state.onLoadNewFile.connect(self.updateModel)
-        self.state.onUnitChange.connect(lambda x: self.model.dataChanged())
+        #self.state.onUnitChange.connect(lambda x: self.model.resetInternalData())
 
     def updateModel(self):
-        evts = self.state.segment.events
+        evts = self.state.segment.events #+ [x.event for x in self.state.spike_groups]
         if evts is not None:
             self.load_events(evts)
 
@@ -138,26 +145,49 @@ class EventView(QtWidgets.QWidget):
         e = self.eventSelectorModel.listData[index]
         self.model.updateEvent(e)
 
-    def add_event(self, info):
+    def add_event(self, info): # TODO: strictly this should be in the model
         # TODO: update the event and annotations of selected event.
-        pass
+        array_annotations={}
+        for  k,v in info.items():
+            if k in  ("timestamp","label"):
+                continue
+            if v == "":
+                v = None
+            array_annotations[k]  = np.array([v], dtype=self.model.event.array_annotations[k].dtype) 
+
+        evt = Event(np.array([info['timestamp']]), units=self.model.event.units, labels=np.array([info['label']]), array_annotations=array_annotations)
+        if len(self.model.event.labels) == 0:
+            self.model.event.labels = ['']*len(self.model.event)
+            
+        new_evt = self.model.event.merge(evt)
+        new_evt.name = self.model.event.name
+        i = next(i for i,x in enumerate(self.state.segment.events) if id(x)==id(self.model.event))
+        self.state.segment.events[i] = new_evt
+        self.model.dataChanged
+        self.updateModel()
+
 
     def add_clicked(self):
 
         dialog = EventEdit(
             self,
             self.state.event_signal[self.state.stimno],
-            {k: "" for k in self.model.event.array_annotations.keys()},
+            {"label":"",**{k: "" for k in self.model.event.array_annotations.keys()}},
         )
 
         dialog.buttonBox.accepted.connect(lambda: self.add_event(dialog.annotations))
         dialog.setModal(True)
         dialog.show()
 
-    def del_clicked(self):
+    def del_clicked(self): # TODO: strictly this should be in the model
         idxs = self.ui.eventTableView.selectedIndexes()
-        self.state.updateUnit()
-        pass
+        idxs = np.unique([x.row() for x in idxs])
+        #self.state.updateUnit()
+       
+        for i in sorted(idxs, reverse=True):
+            np.delete(self.model.event,i)
+        self.updateModel()
+
 
     def go_clicked(self):
 
@@ -171,6 +201,11 @@ class EventView(QtWidgets.QWidget):
 
     def load_events(self, events: List[Event]):
         if len(events) > 0:
+            i = 0
+            try:
+                i=next(self.model.event.name == e.name for e in events)
+            except:
+                pass
             self.model.updateEvent(events[0])
             self.eventSelectorModel.setData(events)
 

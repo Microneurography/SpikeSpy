@@ -115,7 +115,7 @@ class UnitView(QMainWindow):
         sig_erp = self.state.analog_signal_erp
         idx_arr = sg.idx_arr
         self.lines = {}
-
+        ylims = [-0.1,0.1]
         for i, idx, d in zip(range(len(sig_erp)), idx_arr, sig_erp):
 
             if idx is None:
@@ -125,6 +125,8 @@ class UnitView(QMainWindow):
                 ydata = d[max(idx[0] - self.w, 0) : min(idx[0] + self.w, len(d))]
 
             self.lines[i] = np.vstack((np.arange(-self.w, self.w), ydata)).T
+            ylims[0] = np.min(ydata)
+            ylims[1] = np.max(ydata)
             # self.lines[i] = ax.plot(
             #     np.arange(-self.w, self.w), ydata, alpha=0.3, color="gray"
             # )[
@@ -136,9 +138,8 @@ class UnitView(QMainWindow):
 
         lc = LineCollection(self.lines.values(), alpha=0.3, color="gray")
         ax.add_artist(lc)
-        ax.set_ylim(
-            np.min(np.stack(self.lines.values())), np.max(np.stack(self.lines.values()))
-        )
+        ax.set_ylim(ylims)
+        
 
         self.view.draw_idle()
 
