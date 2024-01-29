@@ -150,6 +150,7 @@ class MdiView(QMainWindow):
         self.setWindowTitle(f"SpikeSpy - {version}")
         self.state = state or ViewerState(**kwargs)
         self.loadFile.connect(self.state.loadFile)
+        self.loadFile.connect(self.updateRecents)
         self.state.onLoadNewFile.connect(
             lambda self=self: self.setWindowTitle(
                 f"SpikeSpy ({version}) - {Path(self.state.title).name}"
@@ -179,8 +180,9 @@ class MdiView(QMainWindow):
 
         file_menu = self.menubar.addMenu("&File")
         file_menu.addAction(
-            QAction("Open", self, shortcut="Ctrl+O", triggered=lambda: self.open())
+            QAction("Open...", self, shortcut="Ctrl+O", triggered=lambda: self.open())
         )
+        self.recent_menu = file_menu.addMenu("Open Recent")
         file_menu.addAction(
             QAction(
                 "Save as nixio",
@@ -205,6 +207,12 @@ class MdiView(QMainWindow):
                 triggered=lambda: self.import_csv(),
             )
         )
+       
+        self.updateRecents(None,None)
+        
+        self.settings_file.endArray()
+            
+    
         edit_menu = self.menubar.addMenu("&Edit")
         edit_menu.addAction(
             QAction(
@@ -364,6 +372,63 @@ class MdiView(QMainWindow):
                         [f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
                     )
 
+    def updateRecents(self, filename, type):
+
+        if filename is not None:
+            to_save = [filename]
+            for i in range(self.settings_file.beginReadArray("Recent")):
+                self.settings_file.setArrayIndex(i)
+                prevVal = self.settings_file.value("filename")
+                if prevVal == filename:
+                    continue
+                to_save.append(prevVal)
+            self.settings_file.endArray()
+            
+            self.settings_file.beginWriteArray("Recent")
+            for i in range(len(to_save)):
+                self.settings_file.setArrayIndex(i)
+                self.settings_file.setValue("filename", to_save[i])
+            self.settings_file.endArray()
+
+        self.recent_menu.clear()
+        for i in range(self.settings_file.beginReadArray("Recent")):
+            self.settings_file.setArrayIndex(i)
+            fname = self.settings_file.value("filename")
+            self.recent_menu.addAction(
+                QAction(
+                    Path(fname).name,
+                    self,
+                    triggered=lambda: self.loadFile.emit(fname, "h5")
+                )
+            )
+
+    def export_npz(
+        self,
+    ):  # save a condensed analysis package. - should also be able to load these in spikespy
+        from .processing import create_erp_signals
+
+        # erp = self.state.get_erp()
+        timestamps = self.state.event_signal
+        details = {
+            "sampling_rate": self.state.sampling_rate,
+            "unit": "mV",
+            "window_size": self.state.window_size,
+            "original_data": "",  # TODO: get ref. to original file if possible
+        }
+
+        units = self.state.spike_groups
+        units_erps = [
+            create_erp_signals(
+                self.state.analog_signal, e.event, -0.5 * pq.ms, 1 * pq.ms
+            )
+            for e in units
+        ]
+        other_events = self.state.segment.events
+        signal_erps = [
+            create_erp_signals(e, timestamps, -0.5 * pq.ms, 1 * pq.ms)
+            for e in self.state.segment.analogsignals
+        ]
+
     def import_csv(self):
         open_filename = QFileDialog.getOpenFileName(self, "csv import")[0]
         if open_filename is None:
@@ -452,7 +517,7 @@ class MdiView(QMainWindow):
 def save_file(
     filename,
     spike_groups,
-    data=None,
+    data:neo.Segment=None,
     metadata=None,
     event_signal=None,
     signal_chan=None,
@@ -466,31 +531,19 @@ def save_file(
             "date": datetime.now(),
         }
 
-    def create_event_signals():
-        events = []
+    
 
-        # 1. create timestamps from them
-        for i, sg in enumerate(spike_groups):
-            ts = []
-            for e, s in zip(event_signal, sg.idx_arr):
-                if s is None:
-                    continue
-                s_in_sec = s[0] / signal_chan.sampling_rate
-                ts.append(e + s_in_sec)
-            events.append(
-                neo.Event(
-                    np.array(ts),
-                    name=f"unit_{i}",
-                    annotations=metadata,
-                    units="s",
-                )
-            )  # TODO: add more details about the events
+    #TODO: we could try just updating the events in an already existing h5
+    if filename is None:
 
-        return events
-
-    from copy import deepcopy
+        # check if data is an opened file in rw
+        # check if analogsignals are in file (by nix_name), if not either add of fail.
+        # check if events are in file (by nix_name, and data)
+        # remove changed events, add new ones
+        pass
 
     if data is not None:
+        from copy import deepcopy
         data2 = deepcopy(data)
 
         # remove all 'nix_names' which prevent saving the file
@@ -505,13 +558,14 @@ def save_file(
     else:
         data2 = neo.Segment()
 
-    for x in create_event_signals():
-        data2.events.append(x)
+    for x in spike_groups:
+        x.event.annotate(**metadata)
+        data2.events.append(x.event)
 
     blk = neo.Block(name="main")
     blk.segments.append(data2)
     if Path(filename).exists():
-        Path(filename).unlink()
+        Path(filename).unlink() # should probably do a user check here...
     n = NixIO(filename, mode="rw")
     n.write_block(blk)
     n.close()

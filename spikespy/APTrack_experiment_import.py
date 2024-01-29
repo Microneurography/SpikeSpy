@@ -87,7 +87,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             "kmicroVolts", pq.uV / float(header["bitVolts"]), symbol="kuV"
         )
         # header['']
-        if record_no is not None and record_no >= 1:
+        if record_no is not None and record_no >= 1 and False: # DISABLED
             ch_mmap2 = ch_mmap[ch_mmap["recording"] == record_no - 1]
         else:
             ch_mmap2 = ch_mmap
@@ -127,16 +127,31 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             idxs_rising = idxs[
                 0
             ]  # [idxs[1]==1].astype(int) # only take the rising edge
+            t_rising = (idxs_rising / sampling_rate).rescale("ms")
+
+            to_keep = np.ones(shape=len(t_rising), dtype=bool)
+
+            for i,x in enumerate(t_rising):
+                if i == 0 or np.all(to_keep==False):
+                    continue
+                last_val = t_rising[i-np.searchsorted(to_keep[:i:-1], True)-1]
+                if (x-last_val) < 100:
+                    to_keep[i] = False
+
+            t_rising = t_rising[to_keep]
+            # filter any < 100ms intervals (take first) 
+            
+
             seg.events.append(
                 Event(
-                    (idxs_rising / sampling_rate).rescale("s") + t_start,
+                    t_rising.rescale("s") + t_start,
                     type_id=TypeID.TTL.value,
                     name=f.name,
                     array_annotations={
                         "duration": (
-                            np.array(idxs[1] - idxs[0] - 1) / sampling_rate
+                            np.array(idxs[1][to_keep] - idxs[0][to_keep] - 1) / sampling_rate
                         ).rescale("s"),
-                        "maximum": (idxs[2] * ch_units_probe).rescale("mV"),
+                        "maximum": (idxs[2][to_keep] * ch_units_probe).rescale("mV"),
                     },
                     description=f.details,
                 )
@@ -148,7 +163,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
 
     if aptrack_events is not None:
         spike_events, stimChange_events, protocol_events = parse_APTrackEvents(
-            aptrack_events
+            aptrack_events#, offset=t_start
         )
 
         units = []
@@ -159,7 +174,7 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
                 units.append(e)
         except:
             pass
-        seg.events += units  # TODO: include the protocol info
+        seg.events += units 
         seg.events += [stimChange_events, protocol_events]
     return seg
 
@@ -173,8 +188,15 @@ def parse_APTrackEvents(filename):
     curProtocolNo = 0
     curProtocolStep = 0
     sampleRate = 30000  # TODO: this should be found... somewhere? or neo may be able to handle timestamps
+    sep = None
     for l in f.readlines():
-        l2 = l.split(" ", 1)
+        if sep is None:
+            val = re.finditer("\d+([, ])", l) 
+            try:
+                sep =  next(val).group(1)
+            except:
+                continue
+        l2 = l.split(sep, 1)
         if len(l2) == 1:
             continue
         timestamp = int(l2[0])
@@ -261,7 +283,7 @@ def process_folder(foldername: str, record_no=1, config=None):
             channo += 16  # sometimes there is just the channel number for ADC
         rex = f"_(((CH)?{channo})|({chname}))"
         if record_no > 1:
-            rex += f"(_{record_no})?"
+            rex += f"(_{record_no})"
         rex += ".continuous"
 
         matches = [x for x in all_files if len(re.findall(rex, str(x.name))) == 1]
@@ -451,3 +473,8 @@ try:
     find_square_pulse = numba.jit(find_square_pulse)
 except:
     logging.info("optional dependency numba will speed up find_square_pulse method")
+
+# ##! 
+# def test_load():
+#     path = "/Users/xs19785/Library/CloudStorage/OneDrive-UniversityofBristol/Microneurography/Data/2023-03-14_14-11-52/Record Node 104"
+#     data = process_folder(path)

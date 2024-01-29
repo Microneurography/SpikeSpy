@@ -92,7 +92,7 @@ class falling_leaf_plotter:
             ax.set_autoscale_on(False)
 
             self.ax_track_cmap = ax.imshow(
-                np.abs(im_data),
+                np.clip(im_data,0,max(im_data)),
                 aspect="auto",
                 cmap="gray_r",
                 clim=(self.percentiles[40], self.percentiles[95]),
@@ -484,7 +484,9 @@ class MultiTraceView(QMainWindow):
             return
 
         # self.ax_right_fig.clear()
-        self.percentiles = np.percentile(np.abs(self.state.get_erp()), np.arange(100))
+        erp = self.state.get_erp()
+        erp = np.clip(erp,0, np.max(erp))
+        self.percentiles = np.percentile(erp, np.arange(100))
         if self.ax_track_leaf is not None:
             [x.remove() for x in self.ax_track_leaf]
             self.ax_track_leaf = None
@@ -494,7 +496,7 @@ class MultiTraceView(QMainWindow):
 
         if mode == "heatmap":
             self.ax_track_cmap = self.ax.imshow(
-                np.abs(self.state.get_erp()),
+                erp,
                 aspect="auto",
                 cmap="gray_r",
                 clim=(
