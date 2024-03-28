@@ -24,6 +24,7 @@ PySide6-QtAds = "^4.0.0"
 QtPy = "^2.3.0"
 matplotlib = "^3.6.2"
 PySide6 = "^6.4.1"
+open-ephys-python-tools = "^0.1.4"
 
 
 
@@ -39,6 +40,9 @@ pytest-qt = "^4.2.0"
 
 [tool.poetry.scripts]
 spikespy= "spikespy.SpikeSpy:run"
+
+[tool.poetry.group.dev.dependencies]
+ipython = "^8.11.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
