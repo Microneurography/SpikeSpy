@@ -88,7 +88,7 @@ class UnitView(QMainWindow):
         self.state.onStimNoChange.connect(self.update_curstim_line)
         self.state.onUnitGroupChange.connect(self.updateAll)
         # self.state.onUnitChange.connect(self.update_displayed_data)
-        self.state.onUnitChange.connect(self.setup_figure)
+        self.state.onUnitChange.connect(self.updateAll)
 
     @Slot()
     def updateAll(self):
@@ -115,21 +115,31 @@ class UnitView(QMainWindow):
         sig_erp = self.state.analog_signal_erp
         idx_arr = sg.idx_arr
         self.lines = {}
-        # todo: move this to setup, update the current line. at the moment this causes slowdown of ui
+        ylims = [-0.1,0.1]
         for i, idx, d in zip(range(len(sig_erp)), idx_arr, sig_erp):
 
             if idx is None:
+                continue
                 ydata = np.zeros(self.w * 2)
             else:
                 ydata = d[max(idx[0] - self.w, 0) : min(idx[0] + self.w, len(d))]
 
-            self.lines[i] = ax.plot(
-                np.arange(-self.w, self.w), ydata, alpha=0.3, color="gray"
-            )[
-                0
-            ]  # TODO: convert to lineCollection or blit it.
-            if idx is None:
-                self.lines[i].set_visible(False)
+            self.lines[i] = np.vstack((np.arange(-self.w, self.w), ydata)).T
+            ylims[0] = np.min(ydata)
+            ylims[1] = np.max(ydata)
+            # self.lines[i] = ax.plot(
+            #     np.arange(-self.w, self.w), ydata, alpha=0.3, color="gray"
+            # )[
+            #     0
+            # ]  # TODO: convert to lineCollection or blit it.
+            # if idx is None:
+            #     self.lines[i].set_visible(False)
+        from matplotlib.collections import LineCollection
+
+        lc = LineCollection(self.lines.values(), alpha=0.3, color="gray")
+        ax.add_artist(lc)
+        ax.set_ylim(ylims)
+        
 
         self.view.draw_idle()
 
@@ -137,17 +147,22 @@ class UnitView(QMainWindow):
     def update_curstim_line(self, stimno):
 
         idx = self.state.getUnitGroup().idx_arr[stimno]
-        grayline = self.lines[stimno]
-
-        if stimno == self.state.stimno:
-            self.selected_line.set_visible(True)
-            self.selected_line.set_ydata(grayline.get_ydata())
-
-        # self.axes["main"].relim()
-        # self.axes["main"].autoscale_view(True, True, True)
         self.fig.canvas.restore_region(self.blit_data)
+        if stimno in self.lines:
 
+            grayline = self.lines[stimno]
+
+            if stimno == self.state.stimno:
+                self.selected_line.set_visible(True)
+                self.selected_line.set_ydata(grayline[:, 1])
+
+            # self.axes["main"].relim()
+            # self.axes["main"].autoscale_view(True, True, True)
+
+        else:
+            self.selected_line.set_visible(False)
         if idx is not None:
+            self.selected_line.set_visible(True)
             self.axes["main"].draw_artist(self.selected_line)
         self.view.update()
 

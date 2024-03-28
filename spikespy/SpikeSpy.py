@@ -13,9 +13,18 @@ import neo
 import numpy as np
 import PySide6
 import quantities as pq
+import logging
 from matplotlib.widgets import PolygonSelector
 from neo.io import NixIO
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QObject,
+    Qt,
+    Signal,
+    Slot,
+    QSettings,
+)
 from PySide6.QtGui import QAction, QColor, QShortcut, QKeySequence, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -38,6 +47,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QMessageBox,
+    QScrollArea,
+    QTextEdit,
+    QLabel,
 )
 
 # import PySide6QtAds as QtAds
@@ -60,6 +72,54 @@ class MdiView(QMainWindow):
     # signals
     loadFile = Signal(str, str)
 
+    def savePerspectives(self):
+        logging.info(f"using settings file: {self.settings_file.fileName()}")
+        self.dock_manager.addPerspective("main")
+        self.settings_file.beginGroup("view")
+        self.dock_manager.savePerspectives(self.settings_file)
+        class_to_str = {v: k for k, v in self.window_options.items()}
+        open_widgets = [x for x in self.dock_manager.dockWidgets()]
+        self.settings_file.beginWriteArray("window", len(open_widgets))
+        for i, x in enumerate(open_widgets):
+            self.settings_file.setArrayIndex(i)
+            self.settings_file.setValue("name", x.windowTitle())
+            self.settings_file.setValue("class", class_to_str[type(x.widget())])
+            try:
+                settings = x.widget().get_settings()
+            except:
+                settings = {}
+            self.settings_file.setValue("settings", settings)
+
+        self.settings_file.endArray()
+        self.settings_file.endGroup()
+
+    def loadPerspectives(self):
+        # self.settings_file.
+
+        self.settings_file.beginGroup("view")
+        # TODO: Not sure, perhaps closing all open windows is the most rational.
+        # class_to_str = {v: k for k, v in self.window_options.items()}
+        # open_widgets = [
+        #     class_to_str[type(x.widget())] for x in self.dock_manager.dockWidgets()
+        # ]
+        logging.info(f"using settings file: {self.settings_file.fileName()}")
+        self.dock_manager.loadPerspectives(self.settings_file)
+        for x in range(self.settings_file.beginReadArray("window")):
+            self.settings_file.setArrayIndex(x)
+            w = self.newWindow(
+                self.settings_file.value("class"), name=self.settings_file.value("name")
+            )
+            settings = self.settings_file.value("settings")
+            try:
+                w.set_settings(settings)
+            except:
+                pass
+        self.settings_file.endArray()
+
+        self.settings_file.endGroup()
+
+        self.dock_manager.openPerspective("main")
+
     def __init__(
         self,
         parent: PySide6.QtWidgets.QWidget = None,
@@ -67,6 +127,9 @@ class MdiView(QMainWindow):
         **kwargs,
     ) -> None:
         super().__init__(parent)
+        self.settings_file = QSettings(
+            QSettings.Format.IniFormat, QSettings.Scope.UserScope, "spikespy"
+        )
 
         self.window_options = {
             # 'TraceAnnotation': TraceView,
@@ -80,13 +143,21 @@ class MdiView(QMainWindow):
             "Events": EventView,
         }
         self.cur_windows = []
-        import pkg_resources
 
-        version = pkg_resources.get_distribution("spikespy").version
+        from importlib.metadata import version as get_version
+
+        version = get_version("spikespy")
         self.setWindowTitle(f"SpikeSpy - {version}")
         self.state = state or ViewerState(**kwargs)
         self.loadFile.connect(self.state.loadFile)
+        self.loadFile.connect(self.updateRecents)
+        self.state.onLoadNewFile.connect(
+            lambda self=self: self.setWindowTitle(
+                f"SpikeSpy ({version}) - {Path(self.state.title).name}"
+            )
+        )
         self.dock_manager = QtAds.CDockManager(self)
+        self.dock_manager.addPerspective("main")
         self.mdi = QMdiArea()
         # self.setCentralWidget(self.mdi)
 
@@ -109,30 +180,60 @@ class MdiView(QMainWindow):
 
         file_menu = self.menubar.addMenu("&File")
         file_menu.addAction(
-            QAction("Open", self, shortcut="Ctrl+O", triggered=self.open)
+            QAction("Open...", self, shortcut="Ctrl+O", triggered=lambda: self.open())
         )
+        self.recent_menu = file_menu.addMenu("Open Recent")
         file_menu.addAction(
-            QAction("Save as nixio", self, shortcut="Ctrl+S", triggered=self.save_as)
+            QAction(
+                "Save as nixio",
+                self,
+                shortcut="Ctrl+S",
+                triggered=lambda: self.save_as(),
+            )
         )
         file_menu.addAction(
             QAction(
                 "Export spikes as csv",
                 self,
                 shortcut="Ctrl+E",
-                triggered=self.export_csv,
+                triggered=lambda: self.export_csv(),
             )
         )
         file_menu.addAction(
             QAction(
-                "import spikes csv", self, shortcut="Ctrl+I", triggered=self.import_csv
+                "import spikes csv",
+                self,
+                shortcut="Ctrl+I",
+                triggered=lambda: self.import_csv(),
             )
         )
+       
+        self.updateRecents(None,None)
+        
+        self.settings_file.endArray()
+            
+    
         edit_menu = self.menubar.addMenu("&Edit")
         edit_menu.addAction(
             QAction(
                 "undo", self, shortcut="Ctrl+Z", triggered=lambda: self.state.undo()
             )
         )
+        edit_menu.addAction(
+            QAction("save perspective", self, triggered=self.savePerspectives)
+        )
+        edit_menu.addAction(
+            QAction("load perspective", self, triggered=self.loadPerspectives)
+        )
+
+        help_menu = self.menubar.addMenu("Help")
+        help_menu.addAction("check for updates")
+
+        def showInfo():
+            info = InfoDialog()
+            info.exec()
+
+        help_menu.addAction(QAction("About", self, triggered=showInfo))
 
         # key shortcuts
         self.profiler = cProfile.Profile()
@@ -259,6 +360,7 @@ class MdiView(QMainWindow):
             return
         with open(save_filename, "w") as f:
             w = writer(f)
+            # self.state.segment
             w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
             for i, sg in enumerate(self.state.spike_groups):
                 for timestamp in sg.event:
@@ -269,6 +371,63 @@ class MdiView(QMainWindow):
                     w.writerow(
                         [f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
                     )
+
+    def updateRecents(self, filename, type):
+
+        if filename is not None:
+            to_save = [filename]
+            for i in range(self.settings_file.beginReadArray("Recent")):
+                self.settings_file.setArrayIndex(i)
+                prevVal = self.settings_file.value("filename")
+                if prevVal == filename:
+                    continue
+                to_save.append(prevVal)
+            self.settings_file.endArray()
+            
+            self.settings_file.beginWriteArray("Recent")
+            for i in range(len(to_save)):
+                self.settings_file.setArrayIndex(i)
+                self.settings_file.setValue("filename", to_save[i])
+            self.settings_file.endArray()
+
+        self.recent_menu.clear()
+        for i in range(self.settings_file.beginReadArray("Recent")):
+            self.settings_file.setArrayIndex(i)
+            fname = self.settings_file.value("filename")
+            self.recent_menu.addAction(
+                QAction(
+                    Path(fname).name,
+                    self,
+                    triggered=lambda: self.loadFile.emit(fname, "h5")
+                )
+            )
+
+    def export_npz(
+        self,
+    ):  # save a condensed analysis package. - should also be able to load these in spikespy
+        from .processing import create_erp_signals
+
+        # erp = self.state.get_erp()
+        timestamps = self.state.event_signal
+        details = {
+            "sampling_rate": self.state.sampling_rate,
+            "unit": "mV",
+            "window_size": self.state.window_size,
+            "original_data": "",  # TODO: get ref. to original file if possible
+        }
+
+        units = self.state.spike_groups
+        units_erps = [
+            create_erp_signals(
+                self.state.analog_signal, e.event, -0.5 * pq.ms, 1 * pq.ms
+            )
+            for e in units
+        ]
+        other_events = self.state.segment.events
+        signal_erps = [
+            create_erp_signals(e, timestamps, -0.5 * pq.ms, 1 * pq.ms)
+            for e in self.state.segment.analogsignals
+        ]
 
     def import_csv(self):
         open_filename = QFileDialog.getOpenFileName(self, "csv import")[0]
@@ -297,18 +456,32 @@ class MdiView(QMainWindow):
                 timestamps = neo.Event(
                     np.array(v, dtype=np.float64), units=unit, name=f"unit_{k}"
                 )
-                out2.append(tracked_neuron_unit(event=timestamps))
+                out2.append(tracked_neuron_unit(event=timestamps.rescale(pq.s)))
 
             self.state.set_data(spike_groups=(self.state.spike_groups or []) + out2)
 
-    def newWindow(self, k, pos=QtAds.TopDockWidgetArea):
+    def newWindow(self, k, pos=QtAds.TopDockWidgetArea, name=None):
+        # TODO: this needs to be smarter. window names must be unique for perspectives. need to be able to recreate old windows by name
+
         w = self.window_options[k](parent=self, state=self.state)
-        w2 = QtAds.CDockWidget(k)
+        window_no = len(
+            [
+                x
+                for x in self.dock_manager.dockWidgets()
+                if isinstance(x.widget(), self.window_options[k])
+            ]
+        )
+
+        if name is None:
+            name = k + (f" {window_no}" if window_no > 0 else "")
+
+        w2 = QtAds.CDockWidget(name)
         w2.setWidget(w)
         w2.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, True)
         self.dock_manager.addDockWidget(QtAds.NoDockWidgetArea, w2)
         self.cur_windows.append(w2)
         w2.show()
+        return w
 
     @Slot()
     def open(self, type=None):
@@ -344,7 +517,7 @@ class MdiView(QMainWindow):
 def save_file(
     filename,
     spike_groups,
-    data=None,
+    data:neo.Segment=None,
     metadata=None,
     event_signal=None,
     signal_chan=None,
@@ -358,31 +531,19 @@ def save_file(
             "date": datetime.now(),
         }
 
-    def create_event_signals():
-        events = []
+    
 
-        # 1. create timestamps from them
-        for i, sg in enumerate(spike_groups):
-            ts = []
-            for e, s in zip(event_signal, sg.idx_arr):
-                if s is None:
-                    continue
-                s_in_sec = s[0] / signal_chan.sampling_rate
-                ts.append(e + s_in_sec)
-            events.append(
-                neo.Event(
-                    np.array(ts),
-                    name=f"unit_{i}",
-                    annotations=metadata,
-                    units="s",
-                )
-            )  # TODO: add more details about the events
+    #TODO: we could try just updating the events in an already existing h5
+    if filename is None:
 
-        return events
-
-    from copy import deepcopy
+        # check if data is an opened file in rw
+        # check if analogsignals are in file (by nix_name), if not either add of fail.
+        # check if events are in file (by nix_name, and data)
+        # remove changed events, add new ones
+        pass
 
     if data is not None:
+        from copy import deepcopy
         data2 = deepcopy(data)
 
         # remove all 'nix_names' which prevent saving the file
@@ -397,24 +558,17 @@ def save_file(
     else:
         data2 = neo.Segment()
 
-    for x in create_event_signals():
-        data2.events.append(x)
+    for x in spike_groups:
+        x.event.annotate(**metadata)
+        data2.events.append(x.event)
 
     blk = neo.Block(name="main")
     blk.segments.append(data2)
     if Path(filename).exists():
-        Path(filename).unlink()
+        Path(filename).unlink() # should probably do a user check here...
     n = NixIO(filename, mode="rw")
     n.write_block(blk)
     n.close()
-
-
-class EventHistoryView(QWidget):
-    """
-    #TODO: should show the recent history of the selected spike (in table?)
-    """
-
-    pass
 
 
 def align_spikegroup(spikegroup, erp_arr):
@@ -450,6 +604,43 @@ def run():
     # w = SpikeGroupView()
     w.showMaximized()
     sys.exit(app.exec())
+
+
+from importlib.metadata import version, metadata, packages_distributions
+
+
+class InfoDialog(QDialog):
+    # show license info and about
+
+    def __init__(self):
+        super().__init__()
+        # self.textwidget = QScrollArea()
+        self.textarea = QTextEdit()
+
+        self.license_text = self.buid_licence_text()
+        self.textarea.setText(self.license_text)
+        # self.textwidget.setWidget(self.textarea)
+        lo = QVBoxLayout()
+        self.setLayout(lo)
+
+        lo.addWidget(QLabel("SpikeSpy"))
+        lo.addWidget(QLabel("Open source packages & licenses"))
+        lo.addWidget(self.textarea)
+
+    def buid_licence_text(self):
+        out = ""
+        packages = sorted(list(set(sum(packages_distributions().values(), []))))
+        for x in packages:
+            md = metadata(x)
+            out += f"""## {md.get("name")}
+            """
+            for k in ["version", "author", "license", "Project-URL"]:
+                if k not in md:
+                    continue
+                out += f"\n{k}: {md.get(k)}"
+
+            out += "\n\n"
+        return out
 
 
 if __name__ == "__main__":
