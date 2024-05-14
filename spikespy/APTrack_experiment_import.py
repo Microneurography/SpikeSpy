@@ -299,7 +299,6 @@ def parse_APTrackEvents(filename):
         for k, v in array_annotations.items():
             array_annotations[k] = np.array(v)
 
-         
         return Event(  # A bit clunky - for spikeEvents this uses spikeSampleNumber, otherwise use the current timestamp
             np.array(
                 [
@@ -368,6 +367,7 @@ def process_folder(
 
     if config is None:
         config = {}
+
     signals = [
         APTrackRecording(
             find_channel(config.get("rd.0", "CH1")),
@@ -440,6 +440,7 @@ def process_folder(
 
 
 
+
 # def process_folder2(foldername:str, chnum):
 
 #     signals = [
@@ -478,7 +479,6 @@ def find_square_pulse_numpy(arr, width, threshold):
     for start in transitions_up:
         if start < transitions_down[transitions_down_idx]:
             continue  # this should not be possible
-        
 
         while transitions_down[transitions_down_idx] < start:
             transitions_down_idx += 1

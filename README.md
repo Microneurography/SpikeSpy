@@ -28,3 +28,6 @@ done! ✨ 🌟 ✨
 
 [WIP]
 
+## Multi-trace view
+
+## Single-unit view

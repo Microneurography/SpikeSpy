@@ -126,7 +126,7 @@ class ViewerState(QObject):
         super().__init__(parent)
 
         self.segment: neo.Segment = segment
-        self.spike_groups: List[tracked_neuron_unit] = spike_groups
+        self.spike_groups: List[tracked_neuron_unit] = spike_groups or []
         self.stimno = 0
         self.cur_spike_group = 0
         self.trace_count = 3
@@ -393,6 +393,8 @@ class ViewerState(QObject):
     def getUnitGroup(self, unit=None):
         if unit is None:
             unit = self.cur_spike_group
+        if unit is None:
+            return None
         return self.spike_groups[unit]
 
     def set_segment(self, data: neo.Segment):
