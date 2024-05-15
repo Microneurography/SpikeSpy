@@ -222,6 +222,7 @@ class SingleTraceView(QMainWindow):
         if self.trace_line_cache is not None:
             self.trace_line_cache.remove()
             self.trace_line_cache = None
+        self.stimno_label = self.ax.text(0,1.01, "{stimno}", transform=self.ax.transAxes, animated=True)
 
         erp = self.state.get_erp()
         self.ax.set_xlim(0, erp.shape[-1] / self.state.sampling_rate)
@@ -332,6 +333,7 @@ class SingleTraceView(QMainWindow):
     def updateFigure(self):
         sg = self.state.getUnitGroup()
         dpts = self.state.get_erp()[self.state.stimno]  # this should only happen once.
+        self.stimno_label.set_text(f"{self.state.stimno}")
 
         pts, _ = find_peaks(dpts)
         pts_down, _ = find_peaks(-1 * dpts)
@@ -427,6 +429,7 @@ class SingleTraceView(QMainWindow):
 
             self.ax.draw_artist(self.identified_spike_line)
             self.ax.draw_artist(self.trace_line_cache)
+            self.ax.draw_artist(self.stimno_label)
 
             for x in self.topax_lines:
                 self.topax.draw_artist(x)
