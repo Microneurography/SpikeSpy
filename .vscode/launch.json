@@ -43,6 +43,13 @@
             "justMyCode": true
         },
         {
+            "name": "Python: SpikeGroupTable",
+            "type": "python",
+            "request": "launch",
+            "module": "spikespy.SpikeGroupTable",
+            "justMyCode": true
+        },
+        {
             "name": "Python: mng_file_selector",
             "type": "python",
             "request": "launch",
