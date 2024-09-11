@@ -25,9 +25,11 @@ from PySide6.QtWidgets import (
     QTableView,
     QVBoxLayout,
     QWidget,
+    QStyledItemDelegate
 )
 
 from .ViewerState import ViewerState
+from PySide6.QtWidgets import QComboBox
 
 
 class SpikeGroupTableView(QWidget):
@@ -39,7 +41,7 @@ class SpikeGroupTableView(QWidget):
         super().__init__(parent)
         self.spike_tablemodel = SpikeGroupTableModel(lambda: state.spike_groups)
 
-        self.tbl = QTableView(self)
+        self.tbl = SpikeGroupTableView2(self)
         self.tbl.setModel(self.spike_tablemodel)
         self.state = state
         state.onUnitChange.connect(self.spike_tablemodel.update)
@@ -48,7 +50,6 @@ class SpikeGroupTableView(QWidget):
         self.tbl.setSelectionBehavior(QAbstractItemView.SelectRows)
 
         self.addButton = QPushButton("+")
-
         self.addButton.clicked.connect(self.state.addUnitGroup)
 
         vlayout = QVBoxLayout()
@@ -57,6 +58,7 @@ class SpikeGroupTableView(QWidget):
         self.setLayout(vlayout)
 
         self.tbl.selectionModel().selectionChanged.connect(self.set_selection)
+        self.tbl.setItemDelegateForColumn(4, ComboBoxDelegate(self))
 
     @Slot()
     def set_selection(self, x):
@@ -67,6 +69,28 @@ class SpikeGroupTableView(QWidget):
             sg = 0
         self.state.setUnitGroup(sg)
 
+
+class SpikeGroupTableView2(QTableView):
+    pass
+
+
+class ComboBoxDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(ComboBoxDelegate, self).__init__(parent)
+        self.items = ["CMh", "CMi", "unknown"]  # Example items for the dropdown
+
+    def createEditor(self, parent, option, index):
+        combo = QComboBox(parent)
+        combo.setEditable(True)
+        combo.addItems(self.items)
+        return combo
+
+    def setEditorData(self, editor, index):
+        value = index.model().data(index, Qt.EditRole)
+        editor.setCurrentText(value)
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentText(), Qt.EditRole)
 
 class SpikeGroupTableModel(QAbstractTableModel):
     def __init__(self, spikegroups_func=None):
@@ -116,7 +140,51 @@ class SpikeGroupTableModel(QAbstractTableModel):
                 if sg.get_window() is None:
                     return ""
                 return sg.get_window()[column - 1]
+            elif column == 3:  # notes
+                return sg.event.annotations.get("notes")
+            elif column == 4:  # fibre_type
+                return sg.event.annotations.get("fibre_type")
             else:
                 return ""
         elif role == Qt.BackgroundRole:
             return QColor(Qt.white)
+
+    def setData(
+        self,
+        index: Union[PySide6.QtCore.QModelIndex, PySide6.QtCore.QPersistentModelIndex],
+        value: Any,
+        role: int = ...,
+    ) -> bool:
+        if role == Qt.EditRole:
+            column = index.column()
+            row = index.row()
+            sg = self.spikegroups_func()[row]
+            if column == 3: # notes
+                sg.event.annotations["notes"] = value
+                self.dataChanged.emit(index, index)
+                return True
+
+            if column == 4:  # fibre class
+                sg.event.annotations["fibre_type"] = value
+                #sg.fibre_type = value
+                self.dataChanged.emit(index, index)
+                return True
+        return False
+
+    def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+        if index.column() in  [3,4]:  # fibre class
+            return Qt.ItemIsEditable | Qt.ItemIsEnabled
+        return Qt.ItemIsEnabled
+    
+
+if __name__ == "__main__":
+
+    app = QApplication([])
+    state = ViewerState()
+    state.loadFile(r"/Users/xs19785/Documents/Open Ephys/06-dec.h5")
+    # evt = neo.Event(np.array([100]) * pq.s)
+    # evt.array_annotate(info=["something"], number=[5])
+    view = SpikeGroupTableView(None,state=state)
+    # view = EventEdit(event=evt[0], annotations=evt.array_annotations_at_index(0))
+    view.show()
+    app.exec()

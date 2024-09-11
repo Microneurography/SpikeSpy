@@ -6,6 +6,7 @@ from datetime import datetime
 from os import environ
 from pathlib import Path
 from typing import Any, List, Optional, Union
+from csv import writer
 
 import matplotlib
 import matplotlib.style as mplstyle
@@ -52,6 +53,8 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
+from spikespy.processing import MultiAnalogSignal
+
 # import PySide6QtAds as QtAds
 from .mng_file_selector import QNeoSelector
 from .MultiTraceView import MultiTraceView
@@ -67,6 +70,17 @@ import PySide6QtAds as QtAds
 
 mplstyle.use("fast")
 
+window_options = {
+            # 'TraceAnnotation': TraceView,
+            "MultiTrace": MultiTraceView,
+            "UnitView": UnitView,
+            "SpikeGroupTable": SpikeGroupTableView,
+            "SingleTraceView": SingleTraceView,
+            "Settings": NeoSettingsView,
+            "TrackingView": TrackingView,
+            "Data": QNeoSelector,
+            "Events": EventView,
+}
 
 class MdiView(QMainWindow):
     # signals
@@ -131,17 +145,7 @@ class MdiView(QMainWindow):
             QSettings.Format.IniFormat, QSettings.Scope.UserScope, "spikespy"
         )
 
-        self.window_options = {
-            # 'TraceAnnotation': TraceView,
-            "MultiTrace": MultiTraceView,
-            "UnitView": UnitView,
-            "SpikeGroupTable": SpikeGroupTableView,
-            "SingleTraceView": SingleTraceView,
-            "Settings": NeoSettingsView,
-            "TrackingView": TrackingView,
-            "Data": QNeoSelector,
-            "Events": EventView,
-        }
+        self.window_options = window_options
         self.cur_windows = []
 
         from importlib.metadata import version as get_version
@@ -343,7 +347,10 @@ class MdiView(QMainWindow):
                     for x in range(self.state.stimno - 1, -1, -1)
                     if sg[x] is not None
                 )
-                self.state.setUnit(new_x)
+                # localise to nearest peak
+                cur_erp = self.state.get_erp()[self.state.stimno]
+                offset = np.argmax(cur_erp[new_x-300:new_x+300]) -300
+                self.state.setUnit(new_x+offset)
             except StopIteration:
                 pass
 
@@ -354,23 +361,12 @@ class MdiView(QMainWindow):
 
     def export_csv(self):
         save_filename = QFileDialog.getSaveFileName(self, "Export")[0]
-        from csv import writer
+        
 
         if save_filename is None:
             return
-        with open(save_filename, "w") as f:
-            w = writer(f)
-            # self.state.segment
-            w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
-            for i, sg in enumerate(self.state.spike_groups):
-                for timestamp in sg.event:
-                    stim_no = self.state.event_signal.searchsorted(timestamp) - 1
-                    latency = (timestamp - self.state.event_signal[stim_no]).rescale(
-                        pq.ms
-                    )
-                    w.writerow(
-                        [f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
-                    )
+        units = [x.event for x in self.state.spike_groups]
+        export_csv(save_filename, stim_evt = self.state.event_signal, unit_evts=units)
 
     def updateRecents(self, filename, type):
 
@@ -398,7 +394,7 @@ class MdiView(QMainWindow):
                 QAction(
                     Path(fname).name,
                     self,
-                    triggered=lambda: self.loadFile.emit(fname, "h5")
+                    triggered=lambda n,fname=fname: self.loadFile.emit(fname, "h5") # currently assumes h5
                 )
             )
 
@@ -541,6 +537,7 @@ def save_file(
         # check if events are in file (by nix_name, and data)
         # remove changed events, add new ones
         pass
+    blk = neo.Block(name="main")
 
     if data is not None:
         from copy import deepcopy
@@ -551,10 +548,18 @@ def save_file(
             if "nix_name" in x.annotations:
                 del x.annotations["nix_name"]
 
-        data2.analogsignals = [x.rescale("mV") for x in data2.analogsignals]
+        # extract any multianalogsignals into separate segment
+        for x in data2.analogsignals:
+            if isinstance(x, MultiAnalogSignal):
+                data2.analogsignals.remove(x)
+                new_seg = neo.Segment("ERP")
+                new_seg.analogsignals = x.signals
+                blk.segments.append(new_seg)
+
+        #data2.analogsignals = [x.rescale("mV") for x in data2.analogsignals]
 
         # remove previous unit annotations
-        data2.events = [x for x in data2.events if not x.name.startswith("unit_")]
+        data2.events = [x for x in data2.events if not x.name.startswith("unit") and x.annotations.get("type")!="unit"]
     else:
         data2 = neo.Segment()
 
@@ -562,7 +567,7 @@ def save_file(
         x.event.annotate(**metadata)
         data2.events.append(x.event)
 
-    blk = neo.Block(name="main")
+    
     blk.segments.append(data2)
     if Path(filename).exists():
         Path(filename).unlink() # should probably do a user check here...
@@ -608,6 +613,20 @@ def run():
 
 from importlib.metadata import version, metadata, packages_distributions
 
+def run_spikespy(viewerState):
+    app = QApplication(sys.argv)
+    icon_path = Path(sys.modules[__name__].__file__).parent.joinpath("ui/icon.svg")
+    app.setWindowIcon(QIcon(QPixmap(str(icon_path))))
+    # data, signal_chan, event_signal, spike_groups = load_file(
+    # )
+    # w = TraceView(
+    #     analog_signal=signal_chan, event_signal=event_signal, spike_groups=spike_groups
+    # )
+    w = MdiView(state=viewerState)
+    w.showMaximized()
+    app.exec()
+    
+    # w = SpikeGroupView()
 
 class InfoDialog(QDialog):
     # show license info and about
@@ -642,6 +661,24 @@ class InfoDialog(QDialog):
             out += "\n\n"
         return out
 
+
+def export_csv(save_filename, unit_evts, stim_evt):
+    with open(save_filename, "w") as f:
+        w = writer(f)
+        # self.state.segment
+        w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
+        for i, sg in enumerate(unit_evts):
+            for timestamp in sg:
+                stim_no = stim_evt.searchsorted(timestamp) - 1
+                latency = (timestamp - stim_evt[stim_no]).rescale(
+                    pq.ms
+                )
+                w.writerow(
+                    [sg.name if sg.name != "" else f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
+                )
+
+def register_plugin(plugin_name, plugin_class):
+    window_options[plugin_name] = plugin_class
 
 if __name__ == "__main__":
     run()

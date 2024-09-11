@@ -26,9 +26,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from .APTrack_experiment_import import process_folder as open_aptrack
+from .APTrack_experiment_import import process_folder as open_aptrack, APTrackRecording, TypeID
 from .NeoOpenEphyisIO import open_ephys_to_neo
-from .processing import create_erp
+from .processing import create_erp_signals
 
 
 class lru_numpy_memmap:
@@ -96,6 +96,8 @@ class tracked_neuron_unit:
         if len(idx_arr_filt) == 0:
             return None
         return (int(min(idx_arr_filt)), int(max(idx_arr_filt)))
+        
+
 
     def get_idx_arr(self, event_signal, signal_chan):
         p = [None for x in range(len(event_signal))]
@@ -289,6 +291,7 @@ class ViewerState(QObject):
             # if sg.idx_arr is not None:
             #    continue
             p = [None for x in range(len(self.event_signal))]
+            sg.idx_arr = p
             for e in sg.event.rescale("s").times:
                 i = (
                     int(
@@ -303,12 +306,15 @@ class ViewerState(QObject):
                 x = int(
                     ((e - self.event_signal[i]) * self.analog_signal.sampling_rate).base
                 )
-                t_idx = self.analog_signal.time_index(e)
-                if t_idx > len(self.analog_signal):
+                if e > self.analog_signal.t_stop:
                     continue
+                try:
+                    v=self.analog_signal.time_slice(e, e + 1 * pq.ms)[0]
+                except:
+                    v=None
                 if (e - self.event_signal[i]) > self.window_size:
                     continue
-                p[i] = (x, self.analog_signal[t_idx][0])
+                p[i] = (x,v)
 
             sg.idx_arr = p
 
@@ -342,15 +348,18 @@ class ViewerState(QObject):
     ):
         signal = self.segment.analogsignals[signal_idx]
         event_signal = self.segment.events[event_signal_idx]
-
-        s = int(np.array(signal.sampling_rate.base) // ((1 / window_size)))
-        erp = create_erp(
-            signal.rescale("mV").as_array()[:, channel],
-            (event_signal.as_array() - signal.t_start.base)
-            * np.array(signal.sampling_rate, dtype=int),
-            0,
-            s,
+        erp = create_erp_signals(
+            signal, event_signal,0*pq.s, window_size*pq.s
         )
+
+        # s = int(np.array(signal.sampling_rate.base) // ((1 / window_size)))
+        # erp = create_erp(
+        #     signal.rescale("mV").as_array()[:, channel],
+        #     (event_signal.as_array() - signal.t_start.base)
+        #     * np.array(signal.sampling_rate, dtype=int),
+        #     0,
+        #     s,
+        # )
         return erp
 
     def set_window_size(self, window_size):
@@ -380,9 +389,9 @@ class ViewerState(QObject):
         if self.event_signal is None:
             event_signal = neo.Event()
 
-        s = int(np.array(self.analog_signal.sampling_rate.base) // 2)  # 500ms
+        s = int(np.array(self.analog_signal.sampling_rate.magnitude) // 2)  # 500ms
 
-        self.sampling_rate = int(np.array(self.analog_signal.sampling_rate.base))
+        self.sampling_rate = int(np.array(self.analog_signal.sampling_rate.magnitude))
         if len(self.spike_groups) == 0:
             self.spike_groups.append(tracked_neuron_unit(event=Event()))
 
@@ -444,8 +453,9 @@ class ViewerState(QObject):
 
 
 def load_file(data_path, type="h5", **kwargs):
+    # currently this only loads the first segment
     if type == "h5":
-        data = NixIO(data_path, mode="ro").read_block(0).segments[0]
+        data = NixIO(data_path, mode="ro").read_block(0).segments
     # elif type == "dabsys":
     # data = import_dapsys_csv_files(data_path)[0].segments[0]
     elif type == "openEphys":
@@ -464,11 +474,37 @@ def load_file(data_path, type="h5", **kwargs):
 
         config = d.get_config()
         t = config.pop("record")
-        data = open_aptrack(data_path, t, config)
+        
+        # HACK: Add DS4 channels 
+        DS4_channels = [APTrackRecording(
+                    "ADC2",
+                    TypeID.TTL,
+                    "env.ds4.stimVolt",
+                    "The DS5 1V per 10mA",
+        ),
+        APTrackRecording(
+                    "ADC2",
+                    TypeID.ANALOG,
+                    "env.ds4.stimVolt",
+                    "The DS5 1V per 10mA",
+        )
+        ]
+
+        data = open_aptrack(data_path, t, config, DS4_channels)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
     elif type == "spike2":
         data = neo.Spike2IO(data_path)
+    if isinstance(data, list): # multiple segments
+        # create multianalogsignals if there are segments labeled as "ERP"
+        final_sig = next(x for x in data if x.name != "ERP" and x.annotations.get("class_","")!="multianalogsignal")
+        for seg in data:
+            from .processing import MultiAnalogSignal
+            if seg.name == "ERP" or seg.annotations.get("class_","")=="multianalogsignal":
+                erp = MultiAnalogSignal(seg.analogsignals)
+                final_sig.analogsignals.append(erp)
+                
+        data = final_sig
     if len(data.events) == 0:
         event_signal = Event()
     else:
@@ -478,13 +514,15 @@ def load_file(data_path, type="h5", **kwargs):
     spike_event_groups = []
 
     for x in data.events:
-        if not x.name.startswith("unit"):
+        x:Event = x
+        if (not x.name.startswith("unit") ) and (x.annotations.get("type",'')!="unit"):
             continue
         # info = x.times[:,np.newaxis]-event_signal
         # p = [None for x in range(len(event_signal))]
 
         spike_event_groups.append(tracked_neuron_unit(event=x))
 
+    data.file_origin = data_path
     return data, signal_chan, event_signal, spike_event_groups
 
 

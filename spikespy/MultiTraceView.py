@@ -77,6 +77,8 @@ class falling_leaf_plotter:
             im_data = erp[ylim[0] : ylim[1], xlim[0] : xlim[1]]
         else:
             im_data = erp
+            xlim=[0,erp.shape[1]]
+            ylim=[0,erp.shape[0]]
         if mode == "heatmap":
             if self.ax_track_leaf is not None:
                 self.ax_track_leaf.remove()
@@ -92,7 +94,7 @@ class falling_leaf_plotter:
             ax.set_autoscale_on(False)
 
             self.ax_track_cmap = ax.imshow(
-                np.clip(im_data,0,max(im_data)),
+                np.clip(im_data,0,np.max(im_data)),
                 aspect="auto",
                 cmap="gray_r",
                 clim=(self.percentiles[40], self.percentiles[95]),
@@ -155,6 +157,7 @@ class falling_leaf_plotter:
                 for x in range(len(ax_leaf_paths))
             ]
             self.ax_track_leaf.set_colors(new_colors)
+            return self.ax_track_leaf
 
             # op: lines.Line2D = self.mainPlotter.ax_track_leaf[stimNo]
 
@@ -168,6 +171,7 @@ class falling_leaf_plotter:
             self.hline.set_animated(True)
 
             ax.draw_artist(self.hline)
+            return self.hline
 
     def plot_spikegroup(self, ax, sg, **kwargs):
 
@@ -179,6 +183,7 @@ class falling_leaf_plotter:
         scat = ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
         # scat.set_animated(True)
         ax.draw_artist(scat)
+
 
 
 class MultiTraceView(QMainWindow):
@@ -202,6 +207,7 @@ class MultiTraceView(QMainWindow):
         xsize = 1024
         ysize = 480
         dpi = 80
+        self.plotter = falling_leaf_plotter()
 
         self.fig = Figure(figsize=(xsize / dpi, ysize / dpi), dpi=dpi)
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
@@ -429,7 +435,7 @@ class MultiTraceView(QMainWindow):
 
         self.state.onStimNoChange.connect(self.update_ylim)
         self.state.onStimNoChange.connect(lambda *args: self.render())
-
+        self.update_axis()
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
 
@@ -487,41 +493,44 @@ class MultiTraceView(QMainWindow):
         erp = self.state.get_erp()
         erp = np.clip(erp,0, np.max(erp))
         self.percentiles = np.percentile(erp, np.arange(100))
-        if self.ax_track_leaf is not None:
-            [x.remove() for x in self.ax_track_leaf]
-            self.ax_track_leaf = None
-        if self.ax_track_cmap is not None:
-            self.ax_track_cmap.remove()
-            self.ax_track_cmap = None
+        self.ax.clear()
+        self.plotter.setup(self.ax,erp,sampling_rate=self.state.sampling_rate,mode=mode)
+        self.plotter.plot_main(mode=self.mode,ax=self.ax,erp=erp, partial=False)
+        # if self.ax_track_leaf is not None:
+        #     [x.remove() for x in self.ax_track_leaf]
+        #     self.ax_track_leaf = None
+        # if self.ax_track_cmap is not None:
+        #     self.ax_track_cmap.remove()
+        #     self.ax_track_cmap = None
 
-        if mode == "heatmap":
-            self.ax_track_cmap = self.ax.imshow(
-                erp,
-                aspect="auto",
-                cmap="gray_r",
-                clim=(
-                    self.percentiles[self.lowerSpinBox.value()],
-                    self.percentiles[self.upperSpinBox.value()],
-                ),
-                interpolation="antialiased",  # slows down render (i suspect)
-            )
+        # if mode == "heatmap":
+        #     self.ax_track_cmap = self.ax.imshow(
+        #         erp,
+        #         aspect="auto",
+        #         cmap="gray_r",
+        #         clim=(
+        #             self.percentiles[self.lowerSpinBox.value()],
+        #             self.percentiles[self.upperSpinBox.value()],
+        #         ),
+        #         interpolation="antialiased",  # slows down render (i suspect)
+        #     )
 
-        elif mode == "lines":
+        # elif mode == "lines":
 
-            p90 = self.percentiles[95] * 4
-            analog_signal_erp_norm = np.clip(self.state.get_erp(), -p90, p90) / (
-                p90 * 2
-            )
-            self.ax_track_leaf = self.ax.plot(  # could increase performance to just plot lines in view. but then no blitting...
-                (
-                    (analog_signal_erp_norm * -1)
-                    + np.arange(analog_signal_erp_norm.shape[0])[:, np.newaxis]
-                ).T,
-                color="gray",
-                zorder=10,
-            )
-        else:
-            pass
+        #     p90 = self.percentiles[95] * 4
+        #     analog_signal_erp_norm = np.clip(self.state.get_erp(), -p90, p90) / (
+        #         p90 * 2
+        #     )
+        #     self.ax_track_leaf = self.ax.plot(  # could increase performance to just plot lines in view. but then no blitting...
+        #         (
+        #             (analog_signal_erp_norm * -1)
+        #             + np.arange(analog_signal_erp_norm.shape[0])[:, np.newaxis]
+        #         ).T,
+        #         color="gray",
+        #         zorder=10,
+        #     )
+        # else:
+        #     pass
         if self.points_spikegroup is not None:
             self.points_spikegroup.remove()
             self.points_spikegroup = None
@@ -584,7 +593,8 @@ class MultiTraceView(QMainWindow):
             return
         if self.state.analog_signal is None:
             return
-
+        self.ax.set_ylim( len(self.state.event_signal),0)
+        self.ax.set_xlim(0, len(self.state.analog_signal_erp[0]))
         class CustomFormatter(matplotlib.ticker.Formatter):
             def __init__(self, ax, func):
                 super().__init__()
@@ -689,6 +699,7 @@ class MultiTraceView(QMainWindow):
         # self.view.draw_idle()
         self.fig.canvas.restore_region(self.blit_data)
         o = self.plot_curstim_line(self.state.stimno)
+        
         o2 = self.plot_spikegroups()
 
         self.view.update()
@@ -700,6 +711,8 @@ class MultiTraceView(QMainWindow):
         # self.view.update()
 
     def plot_curstim_line(self, stimNo=None):
+        return [self.plotter.highlight_stim(self.ax,stimNo,partial=False)]
+        return
         if stimNo is None:
             return
         if self.hline is not None:

@@ -333,7 +333,10 @@ class SingleTraceView(QMainWindow):
     def updateFigure(self):
         sg = self.state.getUnitGroup()
         dpts = self.state.get_erp()[self.state.stimno]  # this should only happen once.
-        self.stimno_label.set_text(f"{self.state.stimno}")
+        cur_event_time = self.state.event_signal.times[self.state.stimno]
+        hours, remainder = divmod(cur_event_time.magnitude, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        self.stimno_label.set_text(f"{self.state.stimno:04} [{hours:02.0f}:{minutes:02.0f}:{seconds:02.0f}]")
 
         pts, _ = find_peaks(dpts)
         pts_down, _ = find_peaks(-1 * dpts)

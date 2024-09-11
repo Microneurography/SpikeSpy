@@ -112,15 +112,30 @@ def as_neo(
             #     "oe_microVolts", pq.uV * float(header["bitVolts"])
             # )
         # header['']
+        #TODO: THIS BREAKS THINGS when record_no == 0 or None. as the recordings are dis-continuous the timestamps are off.
         if record_no is not None and record_no >= 1 and False:  # DISABLED
             ch_mmap2 = ch_mmap[ch_mmap["recording"] == record_no - 1]
         else:
+            # 3 options: 
+            #   1. use an irregularly sampled
+            #   2. fill in the gaps in the recording
+            #   3. add each recording as a new channel/segment.
             ch_mmap2 = ch_mmap
-
+        
+        if len(np.unique(ch_mmap2['recording'])) >1:
+            # 2.fill in the gaps
+            data = np.zeros(shape=(ch_mmap2['timestamp'][-1]+1024) - ch_mmap2['timestamp'][0], dtype = np.int16)
+            for x in ch_mmap2: # SLOOOOOW
+                ts = x['timestamp'] - ch_mmap2['timestamp'][0]
+                data[ts:ts+1024] =x['data']
+        else:
+            data = ch_mmap2['data'].flat        
+                
+        
         t_start = (ch_mmap2["timestamp"][0] / float(header["sampleRate"])) * pq.s
         if f.probe_type == TypeID.ANALOG:
             asig = AnalogSignal(
-                ch_mmap2["data"].flat,
+                data,
                 sampling_rate=sampling_rate,
                 units=ch_units_probe,
                 type_id=f.probe_type.value,
@@ -145,12 +160,12 @@ def as_neo(
                     )
                 )
         elif f.probe_type == TypeID.TTL:
-            m = np.mean(ch_mmap2["data"])
+            m = np.mean(data)
             # find events from continuous file
             idxs = find_square_pulse_numpy(
-                ch_mmap2["data"].flat,
+                data,
                 int(int(header["sampleRate"]) * 0.0004),
-                (2 * np.std(ch_mmap2["data"] - m)) + m,
+                (2 * np.std(data- m)) + m,
             )  # 2sd from mean
 
             idxs_rising = idxs[
@@ -207,7 +222,11 @@ def as_neo(
             stim_evt = next(x for x in seg.events if x.name == "env.stim")
             for i in range(len(spike_events)):
                 x = spike_events[i]
-                spike_ts = stim_evt[np.searchsorted(stim_evt, x) - 1]
+                idx = np.searchsorted(stim_evt, x) -1
+                if idx == -1:
+                    new_spike_events.append(x) #cant relocate events prior to inital stim
+                    continue
+                spike_ts = stim_evt[idx]
                 new_spike_events.append(
                     spike_ts
                     + (
@@ -680,7 +699,7 @@ def process_oe_binary(folder):
     units = []
     for x in np.unique(spike_events.array_annotations["spikeGroup"]):
         e = spike_events[spike_events.array_annotations["spikeGroup"] == x]
-        e.name = f"unit {x}"
+        e.name = f"unit_{x}"
         units.append(e)
     seg.events += units  
     seg.events += [stimChange_events, protocol_events]

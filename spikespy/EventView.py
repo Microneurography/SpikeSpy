@@ -133,8 +133,11 @@ class EventView(QtWidgets.QWidget):
 
     def updateModel(self):
         evts = self.state.segment.events #+ [x.event for x in self.state.spike_groups]
+        
         if evts is not None:
             self.load_events(evts)
+        
+        
 
     def onStimNoChange(self):
         t = self.state.event_signal[self.state.stimno]
@@ -163,7 +166,7 @@ class EventView(QtWidgets.QWidget):
         new_evt.name = self.model.event.name
         i = next(i for i,x in enumerate(self.state.segment.events) if id(x)==id(self.model.event))
         self.state.segment.events[i] = new_evt
-        self.model.dataChanged
+        #self.model.dataChanged.emit()
         self.updateModel()
 
 
@@ -183,10 +186,15 @@ class EventView(QtWidgets.QWidget):
         idxs = self.ui.eventTableView.selectedIndexes()
         idxs = np.unique([x.row() for x in idxs])
         #self.state.updateUnit()
-       
-        for i in sorted(idxs, reverse=True):
-            np.delete(self.model.event,i)
+        
+        event_idx = next(i for i,x in enumerate(self.state.segment.events) if id(x)==id(self.model.event))
+        #event_nom = self.state.segment.events[event_idx].name
+        self.state.segment.events[event_idx] = self.model.event[~np.isin(np.arange(len(self.model.event)),idxs)]
+
+        
         self.updateModel()
+        
+        
 
 
     def go_clicked(self):
@@ -203,11 +211,12 @@ class EventView(QtWidgets.QWidget):
         if len(events) > 0:
             i = 0
             try:
-                i=next(self.model.event.name == e.name for e in events)
+                i=next(i for i,e in enumerate(events) if self.model.event.name == e.name )
             except:
                 pass
             self.model.updateEvent(events[0])
             self.eventSelectorModel.setData(events)
+            self.onEventChange(i)
 
     def unit_selected(self):
         pass
