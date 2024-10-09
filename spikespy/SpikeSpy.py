@@ -16,7 +16,7 @@ import PySide6
 import quantities as pq
 import logging
 from matplotlib.widgets import PolygonSelector
-from neo.io import NixIO
+from neo.io import NixIO, NixIOFr
 from PySide6.QtCore import (
     QAbstractTableModel,
     QModelIndex,
@@ -53,6 +53,7 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
+from spikespy.check_update import ReleaseNotesDialog, VersionCheckThread
 from spikespy.processing import MultiAnalogSignal
 
 # import PySide6QtAds as QtAds
@@ -65,6 +66,7 @@ from .TrackingView import TrackingView
 from .UnitView import UnitView
 from .ViewerState import ViewerState, prompt_for_neo_file, tracked_neuron_unit
 from .EventView import EventView
+from .MultiTraceFixedView import MultiTraceFixedView
 
 import PySide6QtAds as QtAds
 
@@ -73,6 +75,7 @@ mplstyle.use("fast")
 window_options = {
             # 'TraceAnnotation': TraceView,
             "MultiTrace": MultiTraceView,
+            "MultiTraceFixedView": MultiTraceFixedView,
             "UnitView": UnitView,
             "SpikeGroupTable": SpikeGroupTableView,
             "SingleTraceView": SingleTraceView,
@@ -134,10 +137,17 @@ class MdiView(QMainWindow):
 
         self.dock_manager.openPerspective("main")
 
+    def handle_version_check_result(self, result):
+        if result is not None:
+            version, release_notes = result
+            dialog = ReleaseNotesDialog(version, release_notes)
+            dialog.exec()
+        
     def __init__(
         self,
         parent: PySide6.QtWidgets.QWidget = None,
         state: ViewerState = None,
+        check_updates=False,
         **kwargs,
     ) -> None:
         super().__init__(parent)
@@ -147,6 +157,11 @@ class MdiView(QMainWindow):
 
         self.window_options = window_options
         self.cur_windows = []
+    
+        self.version_check_thread = VersionCheckThread()
+        self.version_check_thread.worker.result.connect(self.handle_version_check_result)
+        if check_updates:
+            self.version_check_thread.start()
 
         from importlib.metadata import version as get_version
 
@@ -231,13 +246,13 @@ class MdiView(QMainWindow):
         )
 
         help_menu = self.menubar.addMenu("Help")
-        help_menu.addAction("check for updates")
 
         def showInfo():
             info = InfoDialog()
             info.exec()
 
         help_menu.addAction(QAction("About", self, triggered=showInfo))
+        help_menu.addAction(QAction("Check for updates", self, triggered=lambda:self.version_check_thread.start()))
 
         # key shortcuts
         self.profiler = cProfile.Profile()
@@ -474,6 +489,7 @@ class MdiView(QMainWindow):
         w2 = QtAds.CDockWidget(name)
         w2.setWidget(w)
         w2.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, True)
+        w2.setFeature(QtAds.CDockWidget.DockWidgetForceCloseWithArea, True)
         self.dock_manager.addDockWidget(QtAds.NoDockWidgetArea, w2)
         self.cur_windows.append(w2)
         w2.show()
@@ -494,19 +510,23 @@ class MdiView(QMainWindow):
         """
         triggered on file->save
         """
-        fname = QFileDialog.getSaveFileName(self, "Save as", filter=".h5")[0]
+        fname = QFileDialog.getSaveFileName(self, "Save as", filter="*.h5 *.nwb")[0]
         # s = neo.Segment()
         if fname == "":
             return
 
-        s = self.state.segment or neo.Segment()
+        if self.state.segment is None:
+            s=neo.Segment()
 
+            s.events.append(self.state.event_signal)
+            s.analogsignals.append(self.state.analog_signal)
+        else:   
+            s = self.state.segment
         save_file(
             fname,
             self.state.spike_groups,
             s,
-            event_signal=self.state.event_signal,
-            signal_chan=self.state.analog_signal,
+           
         )
 
 
@@ -514,9 +534,7 @@ def save_file(
     filename,
     spike_groups,
     data:neo.Segment=None,
-    metadata=None,
-    event_signal=None,
-    signal_chan=None,
+    metadata=None
 ):
     """
     Saves a file containing the spike groups
@@ -569,9 +587,13 @@ def save_file(
 
     
     blk.segments.append(data2)
+    data2.block = blk
     if Path(filename).exists():
         Path(filename).unlink() # should probably do a user check here...
-    n = NixIO(filename, mode="rw")
+    blk.annotations['session_start_time'] = data2.annotations.get('session_start_time', datetime.now())
+    output_formats = {'h5':NixIO, 'nwb':neo.NWBIO}
+    export_class = output_formats[filename.split(".")[-1]]
+    n = export_class(filename, mode="rw")
     n.write_block(blk)
     n.close()
 
@@ -668,13 +690,17 @@ def export_csv(save_filename, unit_evts, stim_evt):
         # self.state.segment
         w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
         for i, sg in enumerate(unit_evts):
+            nom = sg.name
+            if nom is None or nom == "":
+                nom = f"unit_{i}"
             for timestamp in sg:
                 stim_no = stim_evt.searchsorted(timestamp) - 1
                 latency = (timestamp - stim_evt[stim_no]).rescale(
                     pq.ms
                 )
+
                 w.writerow(
-                    [sg.name if sg.name != "" else f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
+                    [nom, stim_no, latency.base, timestamp.rescale(pq.ms).base]
                 )
 
 def register_plugin(plugin_name, plugin_class):

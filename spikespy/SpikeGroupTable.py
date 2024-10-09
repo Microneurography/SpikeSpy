@@ -135,7 +135,7 @@ class SpikeGroupTableModel(QAbstractTableModel):
         sg = self.spikegroups_func()[row]
         if role == Qt.DisplayRole:
             if column == 0:  # SpikeID
-                return row
+                return sg.event.name or row
             elif column in (1, 2):  # start/end
                 if sg.get_window() is None:
                     return ""

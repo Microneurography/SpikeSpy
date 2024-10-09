@@ -270,7 +270,7 @@ def parse_APTrackEvents(filename):
     other_messages = []
     for l in f.readlines():
         if sep is None:
-            val = re.finditer("\d+([, ])", l)
+            val = re.finditer("\\d+([, ])", l)
             try:
                 sep = next(val).group(1)
             except:
@@ -373,7 +373,7 @@ def process_folder(
     all_files = list(Path(foldername).glob(f"*.continuous"))
 
     def find_channel(chname, foldername=None):
-        channo = int(re.sub("[^\d]", "", chname))
+        channo = int(re.sub("[^\\d]", "", chname))
         if chname.startswith("ADC"):
             channo += 16  # sometimes there is just the channel number for ADC
         rex = f"_(((CH)?{channo})|({chname}))"

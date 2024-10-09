@@ -1,0 +1,114 @@
+import sys
+from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QToolBar
+from PySide6.QtGui import QAction
+from PySide6.QtCore import Signal, Slot
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qtagg import FigureCanvas, NavigationToolbar2QT
+
+from spikespy.ViewerState import ViewerState
+
+class QMatplotlib(QMainWindow):
+    # Define a custom signal for updating the plot
+    plot_update_signal = Signal(bool)
+
+    def __init__(self, state=None, parent=None, include_matplotlib_toolbar=False):
+        super().__init__(parent)
+
+        self.setWindowTitle("Matplotlib Viewer")
+
+        # Create a central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        # Create a vertical layout
+        layout = QVBoxLayout(central_widget)
+
+        # Create a Matplotlib figure and canvas
+        self.figure = Figure()
+        self.canvas = FigureCanvas(self.figure)
+
+        # Add the canvas to the layout
+        layout.addWidget(self.canvas)
+
+        # Connect the click event handler
+        self.canvas.mpl_connect('button_press_event', self.on_click)
+
+        # Connect the plot update signal to the update_plot slot
+        self.plot_update_signal.connect(self.update_figure)
+
+        # Plot some example data
+        self.setup_figure()
+
+        if include_matplotlib_toolbar:
+            self.matplotlib_toolbar = NavigationToolbar2QT(self.canvas, self)
+            self.addToolBar(self.matplotlib_toolbar)
+
+        # Create a toolbar
+        toolbar = self.create_toolbar()
+        if toolbar is not None:
+            self.addToolBar(toolbar)
+
+        if state is not None:
+            self.setState(state)
+    
+    def setState(self, state: ViewerState):
+        self.state:ViewerState = state
+        self.state.onUnitChange.connect(self.onUnitChange)
+        self.state.onUnitGroupChange.connect(self.onUnitGroupChange)
+        self.state.onLoadNewFile.connect(self.onLoadNewFile)
+        self.plot_update_signal.emit(True)
+    
+    def onUnitChange(self):
+        # Emit the plot update signal
+        self.plot_update_signal.emit(False)
+
+    def onUnitGroupChange(self):
+        # Emit the plot update signal
+        self.plot_update_signal.emit(False)
+
+    def onLoadNewFile(self):
+        # Emit the plot update signal
+        self.plot_update_signal.emit(True)
+
+    def create_toolbar(self):
+        toolbar = QToolBar("Settings")
+        # self.addToolBar(toolbar)
+
+        # plot_action = QAction("Plot Example Data", self)
+        # plot_action.triggered.connect(self.update_figure)
+        # toolbar.addAction(plot_action)
+
+    def setup_figure(self):
+        self.ax = self.figure.add_subplot(111)
+    
+    def draw_figure(self):
+        self.ax.plot([1, 2, 3, 4, 5], [1, 4, 9, 16, 25])
+
+
+    def on_click(self, event):
+        if event.inaxes:
+            print(f"Clicked at x={event.xdata}, y={event.ydata}")
+
+    def update_figure(self, should_clear=False):
+        # Implement the logic to update the plot
+        if should_clear:
+            self.ax.clear()
+            self.setup_figure()
+        self.draw_figure()
+        self.canvas.draw()
+        
+
+    def get_settings(self):
+        return {
+        }
+
+    def set_settings(self, values):
+        self.setup_figure()
+
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = QMatplotlib()
+    window.show()
+    sys.exit(app.exec())

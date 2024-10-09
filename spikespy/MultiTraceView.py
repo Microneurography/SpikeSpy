@@ -30,12 +30,16 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFormLayout,
     QDoubleSpinBox,
+
 )
 from PySide6 import QtCore
-
+from PySide6.QtCore import QTimer
 from .NeoSettingsView import NeoSettingsView
 from .ViewerState import ViewerState, tracked_neuron_unit
 
+from .QMatplotlib import QMatplotlib
+from matplotlib.lines import Line2D
+import time
 mplstyle.use("fast")
 
 from matplotlib.axes import Axes
@@ -196,6 +200,7 @@ class MultiTraceView(QMainWindow):
     ):
 
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setFocusPolicy(Qt.ClickFocus)
         self.state: ViewerState = None
         self.ax_track_cmap = None
@@ -203,6 +208,16 @@ class MultiTraceView(QMainWindow):
         self.points_spikegroup = None
         self.hline = None
         self.figcache = None
+        self.references = []
+        
+        # throttle the update for upateAll to every 500ms when using the comboboxes.
+        self.update_timer = QTimer()
+        self.update_timer.setSingleShot(True)
+        self.update_timer.timeout.connect(self.updateAll)
+        self.update_timer.setInterval(500)
+        self.close_conn = self.destroyed.connect(lambda: self.closeEvent())
+        
+        
 
         xsize = 1024
         ysize = 480
@@ -234,7 +249,7 @@ class MultiTraceView(QMainWindow):
         layout = QVBoxLayout()
         self.lowerSpinBox = QSpinBox(self)
         self.lowerSpinBox.setRange(0, 99)
-        self.lowerSpinBox.valueChanged.connect(lambda x: self.updateAll())
+        self.lowerSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
 
         self.upperSpinBox = QSpinBox(self)
         self.upperSpinBox.setRange(0, 99)
@@ -242,8 +257,9 @@ class MultiTraceView(QMainWindow):
         self.lowerSpinBox.valueChanged.connect(self.upperSpinBox.setMinimum)
         self.upperSpinBox.valueChanged.connect(self.lowerSpinBox.setMaximum)
         self.lowerSpinBox.setValue(45)
-        self.upperSpinBox.valueChanged.connect(lambda x: self.updateAll())
+        self.upperSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
 
+        self.referneces = []
         self.lock_to_stimCheckBox = QCheckBox("lock")
 
         def set_lock(*args):
@@ -423,18 +439,40 @@ class MultiTraceView(QMainWindow):
 
         self.update()
 
+    def closeEvent(self, *args):
+        self.remove_references()
+        self.dialogPolySelect.close()
+        self.settingsDialog.close()
+        self.pg_selector.set_active(False)
+
+    def remove_references(self,*args,**kwargs):
+        if self.state is not None:
+            for ref in self.references:
+                self.state.disconnect(ref)
+            
+
     def set_state(self, state):
         self.state = state
-        self.state.onLoadNewFile.connect(self.reset_right_axes_data)
-        self.state.onLoadNewFile.connect(self.setup_figure)
-        self.state.onLoadNewFile.connect(self.update_axis)
+        
+        self.remove_references()
+        
 
-        self.state.onUnitGroupChange.connect(lambda *args: self.render())
-        self.state.onUnitChange.connect(lambda *args: self.render())
-        self.state.onUnitGroupChange.connect(lambda *args: self.reset_right_axes_data())
+        if self.state is None:
+            return
+        
+        self.references.append(self.state.onLoadNewFile.connect(self.reset_right_axes_data))
+        self.references.append(self.state.onLoadNewFile.connect(self.setup_figure))
+        self.references.append(self.state.onLoadNewFile.connect(self.update_axis))
 
-        self.state.onStimNoChange.connect(self.update_ylim)
-        self.state.onStimNoChange.connect(lambda *args: self.render())
+        self.references.append(self.state.onUnitGroupChange.connect(lambda *args: self.render()))
+        self.references.append(self.state.onUnitChange.connect(lambda *args: self.render()))
+        self.references.append(self.state.onUnitGroupChange.connect(lambda *args: self.reset_right_axes_data()))
+
+        self.references.append(self.state.onStimNoChange.connect(self.update_ylim))
+        self.references.append(self.state.onStimNoChange.connect(lambda *args: self.render()))
+        self.references.append(self.state.onUnitChange.connect(lambda x: self.reset_right_axes_data()))
+
+
         self.update_axis()
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
@@ -738,13 +776,14 @@ class MultiTraceView(QMainWindow):
         # self.view.update()
         return [self.hline]
 
+
     @Slot()
     def updateAll(self):
-        if self.mode != "heatmap" or self.ax_track_cmap is None:
+        if self.mode != "heatmap" or self.plotter.ax_track_cmap is None:
             pass
         else:
 
-            self.ax_track_cmap.set_clim(
+            self.plotter.ax_track_cmap.set_clim(
                 self.percentiles[self.lowerSpinBox.value()],
                 self.percentiles[self.upperSpinBox.value()],
             )
@@ -759,7 +798,7 @@ class MultiTraceView(QMainWindow):
         self.state.setStimNo(round(e.ydata))
 
 
-from matplotlib.lines import Line2D
+
 
 
 class LineSelector(PolygonSelector):

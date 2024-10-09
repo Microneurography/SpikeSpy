@@ -4,7 +4,9 @@ from neo import AnalogSignal, SpikeTrain
 from quantities import second
 from scipy import signal
 from tqdm import tqdm
-
+from csv import DictReader
+import logging
+import neo
 
 def wavelet_denoise(in_arr, threshold=0.4, level=None, wlet="sym7", noise_arr=None):
     """
@@ -90,14 +92,19 @@ import quantities as pq
 def create_erp_signals(signal_chan, idxs, offset=-1000*pq.ms, length=30000*pq.ms):
     arr = np.zeros((len(idxs), int(np.ceil(length.rescale(pq.second).magnitude*signal_chan.sampling_rate.magnitude))))
     for i, x in enumerate(idxs):
-        arr[i].flat[:] = signal_chan.time_slice(x + offset, x + offset + length).as_array()
-    return arr
+        try:
+            arr[i].flat[:] = signal_chan.time_slice(x + offset, x + offset + length).as_array()
+        except:
+            pass # handle the case where the time slice is outside the range of the signal
+    return arr * signal_chan.units
 
 # a neo class that creates an api like analogsignal for multiple short signals with different start/stop times. they must not overlap.
 from neo.core.basesignal import BaseSignal
 from typing import List
 from neo.core import Group, Segment
-class MultiAnalogSignal:
+class MultiAnalogSignal():
+    proxy_for = AnalogSignal
+    segment:Segment = None
     
     def __init__(self, signals:List[AnalogSignal]):
         self.signals = signals
@@ -123,19 +130,37 @@ class MultiAnalogSignal:
     def time_slice(self, start, stop):
         # find the signals that overlap with the start/stop
         # then slice them and concatenate them
-        sig = np.searchsorted(self.t_starts, start, side="left")  -1
+        sig_start = np.searchsorted(self.t_starts, start, side="right")  -1
+        sig_end =  np.searchsorted(self.t_starts, stop, side="right")  -1
 
-        x = self.signals[sig]
         try:
+
+            x = self.signals[sig_start]
             start_idx = x.time_index(start)
+            x2 = self.signals[sig_end]
             stop_idx = x.time_index(stop)
+                
         except ValueError:
             # Handle the case where start or stop is outside the range of x
             raise ValueError(f"No signal found for the time slice {start}-{stop}")
 
 
-        return x[start_idx:stop_idx]
+
+        if sig_end != sig_start:
+            logging.warning("region spans mutliple blocks, will return a multianalogsignal")
+           
             
+            sigs = [x[start_idx:]]
+            sigs+= self.signals[sig_start+1:sig_end]
+            sigs += [x2[:stop_idx]]
+            
+            return MultiAnalogSignal(
+                sigs
+            )
+
+        return  x[start_idx:stop_idx]
+            
+    
 
     @property
     def times(self):
@@ -184,9 +209,38 @@ def create_neo_multianalogsignal(signal_chan:AnalogSignal, idxs:Event, offset=-1
             warnings.warn("start and stop are the same, skipping")
             continue
 
-        signals.append(signal_chan.time_slice(start, stop))
+        signals.append(signal_chan.time_slice(start, stop).copy())
 
   
 
     return MultiAnalogSignal(signals)
 
+def read_spike_csv(open_filename):
+    with open(open_filename, "r") as f:
+        r = DictReader(f)
+        try:
+            k = next(x for x in r.fieldnames if "timestamp" in x.lower())
+        except StopIteration:
+            import logging
+
+            logging.warn("'timestamp' column not found")
+            return
+
+        unit = pq.ms
+        out = {}
+        for row in r:
+            spikeid = str(row.get("SpikeID", "0"))
+            out[spikeid] = out.get(spikeid, []) + [row[k]]
+
+        out2 = []
+        for k, v in out.items():
+            if k.isdigit():
+                spikeid = "unit_" + k
+            else:
+                spikeid = k
+
+            timestamps = neo.Event(
+                np.array(v, dtype=np.float64), units=unit, name=spikeid, type="unit"
+            )
+            out2.append(timestamps.rescale(pq.s))
+    return out2

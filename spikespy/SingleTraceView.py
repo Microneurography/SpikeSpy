@@ -171,14 +171,12 @@ class SingleTraceView(QMainWindow):
 
         self.setCentralWidget(self.view)
 
+        # connect to signals
         self.state.onLoadNewFile.connect(self.setupFigure)
-
         self.state.onUnitChange.connect(self.updateHistogram)
         self.state.onUnitChange.connect(self.updateFigure)
-
         self.state.onUnitGroupChange.connect(self.updateHistogram)
         self.state.onUnitGroupChange.connect(self.updateFigure)
-
         self.state.onStimNoChange.connect(self.updateFigure)
 
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
@@ -295,10 +293,14 @@ class SingleTraceView(QMainWindow):
                 self.step = None
             except:
                 pass
+        if len(sg.event)==0:
+            return
 
-        values = [x[0] for x in sg.idx_arr if x is not None]
-
-        step = self.state.sampling_rate * 0.0005
+        #values = [x[0] for x in sg.idx_arr if x is not None]
+        values = sg.get_latencies(self.state.event_signal)
+        values[values>self.state.window_size] = (np.nan*pq.ms)
+        values = values[~np.isnan(values)]
+        step = 2  * pq.ms #self.state.sampling_rate * 0.0005 # 0.5ms bins
         if len(values) == 0:
             return
         else:
@@ -320,7 +322,7 @@ class SingleTraceView(QMainWindow):
         QThreadPool.globalInstance().start(self.task)
 
         self.step = self.topax.step(
-            values_binned[1][1:] / self.state.sampling_rate,
+            values_binned[1][1:]/1000 ,
             values_binned[0] / max(values_binned[0]),
             color="gray",
         )
@@ -341,7 +343,7 @@ class SingleTraceView(QMainWindow):
         pts, _ = find_peaks(dpts)
         pts_down, _ = find_peaks(-1 * dpts)
         pts = np.sort(np.hstack([pts, pts_down]).flatten())
-        cur_point = sg.idx_arr[self.state.stimno]
+        
         if self.trace_line_cache is None:
             self.trace_line_cache = self.ax.plot(
                 np.arange(len(dpts)) / self.state.sampling_rate, dpts, color="purple"
@@ -358,23 +360,29 @@ class SingleTraceView(QMainWindow):
             x.remove()
             del x
         self.topax_lines = []
-        if cur_point is not None:
+
+
+        lat = sg.get_latencies([cur_event_time])[0].rescale("s")
+        
+        
+        if lat < self.state.window_size:
+            cur_point = int(lat*self.state.sampling_rate)
             self.identified_spike_line.set_data(
                 (
                     [
-                        cur_point[0] / self.state.sampling_rate,
-                        cur_point[0] / self.state.sampling_rate,
+                        lat.magnitude,
+                        lat.magnitude,
                     ],
                     [0, 1],
                 )
             )
             self.identified_spike_line.set_visible(True)
-            i = pts.searchsorted(cur_point[0])
+            i = pts.searchsorted(cur_point)
             i2 = pts[i - 1 : i + 1]
-            self.closest_pos = i2[np.argmin(np.abs(cur_point[0] - i2))]
+            self.closest_pos = i2[np.argmin(np.abs(cur_point - i2))]
             self.topax_lines.append(
                 self.topax.axvline(
-                    cur_point[0] / self.state.sampling_rate, color="blue", animated=True
+                    lat, color="blue", animated=True
                 )
             )
 
@@ -390,7 +398,7 @@ class SingleTraceView(QMainWindow):
                 )
             )
 
-        if cur_point is None:
+        if lat == np.nan:
             cur_idx -= 1  # edge case where there is no unit
         if (
             (cur_idx + 1) < len(idxs)
@@ -463,7 +471,20 @@ class SingleTraceView(QMainWindow):
         if e.key() == Qt.Key_N:
             self.state.setUnit(self.closest_pos)
         elif e.key() == Qt.Key_Z:
-            pass  # TODO: zoom into current spike
+            # get current spike location
+            spike_ts = self.state.getUnitGroup().get_latencies([self.state.event_signal[self.state.stimno]])[0].rescale("s")
+            if spike_ts == np.nan or spike_ts>self.state.window_size:
+                return
+            self.ax.set_xlim(spike_ts.magnitude-0.005, spike_ts.magnitude+0.005)
+
+            e = self.state.event_signal[self.state.stimno]
+            #set the ylim to be the max of the spike + 5%
+            vals = self.state.analog_signal.time_slice(e+spike_ts-(2*pq.ms),e+spike_ts+(2*pq.ms)).rescale(pq.mV).magnitude
+            min_val = np.min(vals)
+            max_val = np.max(vals)
+            self.ax.set_ylim(min_val-(0.05*np.abs(min_val)),max_val+(0.05*np.abs(max_val)))
+            self.fig.canvas.draw_idle()
+
 
 
 if __name__ == "__main__":
