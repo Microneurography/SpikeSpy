@@ -316,6 +316,8 @@ class ViewerState(QObject):
         self.cur_spike_group = 0
         self.set_data(analog_signal, event_signal, spike_groups=spike_groups)
 
+    def removeUnitGroup(self):
+        pass
     @Slot()
     def addUnitGroup(self):
         self.spike_groups.append(tracked_neuron_unit(event=Event()))

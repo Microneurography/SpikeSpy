@@ -51,6 +51,9 @@ class SpikeGroupTableView(QWidget):
 
         self.addButton = QPushButton("+")
         self.addButton.clicked.connect(self.state.addUnitGroup)
+        self.removeButton = QPushButton("-")
+        self.removeButton.clicked.connect(self.state.removeUnitGroup)
+        
 
         vlayout = QVBoxLayout()
         vlayout.addWidget(self.tbl)

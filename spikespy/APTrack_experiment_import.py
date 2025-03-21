@@ -701,9 +701,9 @@ def process_oe_binary(folder):
         e = spike_events[spike_events.array_annotations["spikeGroup"] == x]
         e.name = f"unit_{x}"
         units.append(e)
-    seg.events += units  
     seg.events += [stimChange_events, protocol_events]
 
+    seg.events += units   
     return seg
 
 
