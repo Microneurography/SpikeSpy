@@ -21,6 +21,7 @@ from PySide6.QtCore import (
     QThread,
     QThreadPool,
     QRunnable,
+    QTimer
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -53,9 +54,10 @@ mplstyle.use("fast")
 class WorkerSignals(QObject):
     result = Signal(np.ndarray)
     cancel = Signal()
+import quantities as pq
 
 
-class updateConv(QRunnable):
+class updateConv(QRunnable): # this is being called too many times currently. 
     def __init__(self, analog_signal, sg, erp):
         self.signals = WorkerSignals()
 
@@ -67,14 +69,27 @@ class updateConv(QRunnable):
         self.signals.cancel.connect(self.cancel)
 
         super().__init__()
-
+    
+    def create_erp_signals(self, signal_chan, idxs, offset=-1000*pq.ms, length=30000*pq.ms):
+        arr = np.zeros((len(idxs), int(np.ceil(length.rescale(pq.second).magnitude*signal_chan.sampling_rate.magnitude))))
+        for i, x in enumerate(idxs):
+            try:# TODO: this is slow, and a lot of processing that is unnescessary.
+                arr[i].flat[:] = signal_chan.time_slice(x + offset, x + offset + length).as_array()
+                if self.cancelled:
+                    return
+            except:
+                pass # handle the case where the time slice is outside the range of the signal
+        return arr * signal_chan.units
+    
     def run(self):
         self.mean_erp = np.mean(
-            create_erp_signals(
+            self.create_erp_signals( 
                 self.analog_signal, self.sg.event, -0.01 * pq.s, +0.02 * pq.s
             ),
             axis=0,
         )
+        if self.cancelled:
+            return
         conv = np.convolve(
             self.mean_erp / np.std(self.mean_erp),
             (self.erp / np.std(self.mean_erp)).flat[:],
@@ -82,47 +97,15 @@ class updateConv(QRunnable):
         ).reshape(self.erp.shape)
         conv[:, 0 : len(self.mean_erp)] = 0
         conv[:, -len(self.mean_erp) :] = 0
-
-        # if not self.thread().isInterruptionRequested():
-        self.signals.result.emit(conv)
-
-    def cancel(self):
-        self.cancelled = True
-
-
-class updateHist(QRunnable):
-    def __init__(self, analog_signal, sg, erp):
-        self.signals = WorkerSignals()
-
-        self.erp = erp
-        self.sg = sg
-        self.analog_signal = analog_signal
-        self.cancelled = False
-
-        self.signals.cancel.connect(self.cancel)
-
-        super().__init__()
-
-    def run(self):
-        self.mean_erp = np.mean(
-            create_erp_signals(
-                self.analog_signal, self.sg.event, -0.01 * pq.s, +0.02 * pq.s
-            ),
-            axis=0,
-        )
-        conv = np.convolve(
-            self.mean_erp,
-            self.erp.flat[:],
-            mode="same",
-        ).reshape(self.erp.shape)
-        conv[:, 0 : len(self.mean_erp)] = 0
-        conv[:, -len(self.mean_erp) :] = 0
-
-        # if not self.thread().isInterruptionRequested():
-        self.signals.result.emit(conv)
+        if not self.cancelled:
+            # if not self.thread().isInterruptionRequested():
+            self.signals.result.emit(conv)
 
     def cancel(self):
         self.cancelled = True
+
+
+
 
 
 from matplotlib.ticker import Formatter
@@ -171,12 +154,28 @@ class SingleTraceView(QMainWindow):
 
         self.setCentralWidget(self.view)
 
+
         # connect to signals
+        self.updateFigurethrottle = QTimer()
+        self.updateFigurethrottle.setInterval(33)  # 30 fps
+        self.updateFigurethrottle.timeout.connect(self.updateFigure_core)
+        self.updateFigurethrottle.start()
+        self.updateFigurethrottle.setSingleShot(True)
+
+        self.updateHistogramThrottle = QTimer()
+        self.updateHistogramThrottle.setInterval(1000)
+        self.updateHistogramThrottle.timeout.connect(self.updateHistogram)
+        self.updateHistogramThrottle.setSingleShot(True)
+
+
+
         self.state.onLoadNewFile.connect(self.setupFigure)
-        self.state.onUnitChange.connect(self.updateHistogram)
+        
         self.state.onUnitChange.connect(self.updateFigure)
-        self.state.onUnitGroupChange.connect(self.updateHistogram)
+        self.state.onUnitChange.connect(lambda *args,**kwargs: self.updateHistogramThrottle.start())
+        
         self.state.onUnitGroupChange.connect(self.updateFigure)
+        self.state.onUnitGroupChange.connect(lambda *args,**kwargs: self.updateHistogramThrottle.start())
         self.state.onStimNoChange.connect(self.updateFigure)
 
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
@@ -200,6 +199,8 @@ class SingleTraceView(QMainWindow):
         self.conv = None
         self.step =None
         self.setupFigure()
+ 
+
 
     @Slot()
     def view_clicked(self, e: MouseEvent):
@@ -284,8 +285,50 @@ class SingleTraceView(QMainWindow):
     def updateThreadDone(self, x):
         self.conv = x
         self.updateFigure()
+    
+    # def updateHistogram(self):
+    #     if self.updateHistogramThrottle.isActive():
+    #         self.updateHistogramThrottle.stop()
+    #     self.updateHistogramThrottle.start()
+    def updateConv(self):
 
+        sg = self.state.getUnitGroup()
+        mean_erp = np.mean(
+            create_erp_signals( 
+                self.state.analog_signal, sg.event, -0.01 * pq.s, +0.02 * pq.s
+            ),
+            axis=0,
+        )
+        erp = self.state.get_erp()
+        conv = np.convolve(
+            mean_erp / np.std(mean_erp),
+            (erp / np.std(erp)).flat[:],
+            mode="same",
+        ).reshape(erp.shape)
+        conv[:, 0 : len(mean_erp)] = 0
+        conv[:, -len(mean_erp) :] = 0
+        self.conv = conv
+        self.updateFigure()
+        
     def updateHistogram(self):
+        sg = self.state.getUnitGroup()
+        #values = [x[0] for x in sg.idx_arr if x is not None]
+        if self.task is not None:
+            self.task.signals.cancel.emit()
+        # if self.updateThread.isRunning():
+        #   self.updateThread.requestInterruption()
+
+        self.task = updateConv(self.state.analog_signal, sg, self.state.get_erp())
+        self.task.signals.result.connect(self.updateThreadDone)
+
+        QThreadPool.globalInstance().start(self.task)
+        self.updateFigure()
+
+        #self.topax.redraw_in_frame()
+
+        #self.blit_data_topax = self.fig.canvas.copy_from_bbox(self.topax.bbox)
+
+    def draw_histogram(self):
         sg = self.state.getUnitGroup()
         if self.step is not None:
             try:
@@ -296,7 +339,6 @@ class SingleTraceView(QMainWindow):
         if len(sg.event)==0:
             return
 
-        #values = [x[0] for x in sg.idx_arr if x is not None]
         values = sg.get_latencies(self.state.event_signal)
         values[values>self.state.window_size] = (np.nan*pq.ms)
         values = values[~np.isnan(values)]
@@ -310,29 +352,21 @@ class SingleTraceView(QMainWindow):
                 step,
             )
         values_binned = np.histogram(values, bins=bins)
-
-        if self.task is not None:
-            self.task.signals.cancel.emit()
-        # if self.updateThread.isRunning():
-        #   self.updateThread.requestInterruption()
-
-        self.task = updateConv(self.state.analog_signal, sg, self.state.get_erp())
-        self.task.signals.result.connect(self.updateThreadDone)
-
-        QThreadPool.globalInstance().start(self.task)
-
         self.step = self.topax.step(
             values_binned[1][1:]/1000 ,
             values_binned[0] / max(values_binned[0]),
             color="gray",
         )
 
-        self.topax.redraw_in_frame()
-
-        self.blit_data_topax = self.fig.canvas.copy_from_bbox(self.topax.bbox)
-
     @Slot()
     def updateFigure(self):
+       
+        if not self.updateFigurethrottle.isActive():
+
+            self.updateFigurethrottle.start()
+
+
+    def updateFigure_core(self):
         sg = self.state.getUnitGroup()
         dpts = self.state.get_erp()[self.state.stimno]  # this should only happen once.
         cur_event_time = self.state.event_signal.times[self.state.stimno]
@@ -362,7 +396,7 @@ class SingleTraceView(QMainWindow):
         self.topax_lines = []
 
 
-        lat = sg.get_latencies([cur_event_time])[0].rescale("s")
+        lat = sg.get_latencies(np.array([cur_event_time])*cur_event_time.units)[0].rescale("s")
         
         
         if lat < self.state.window_size:
@@ -433,6 +467,7 @@ class SingleTraceView(QMainWindow):
         # self.scatter_peaks = self.ax.scatter(pts, dpts[pts], color="black", marker="x")
 
         # self.scatter_peaks2 = self.ax.scatter(pts_down, dpts[pts_down], color="black", marker="x")
+        self.draw_histogram()
         try:
 
             self.fig.canvas.restore_region(self.blit_data)
@@ -484,6 +519,23 @@ class SingleTraceView(QMainWindow):
             max_val = np.max(vals)
             self.ax.set_ylim(min_val-(0.05*np.abs(min_val)),max_val+(0.05*np.abs(max_val)))
             self.fig.canvas.draw_idle()
+        elif (e.key() == Qt.Key_Left or e.key()==Qt.Key_Right) and (e.modifiers() & Qt.ShiftModifier) and self.conv is not None:
+            cur_stimpos = self.state.getUnitGroup().idx_arr[self.state.stimno][0]
+            conv_high = np.percentile(self.conv[self.state.stimno][1000:-1000], 99)
+            idx,_ = find_peaks(self.conv[self.state.stimno], conv_high)
+            #idx = np.where(highlight)[0]
+            print(idx, cur_stimpos)
+            closest_idx = np.searchsorted(idx, cur_stimpos)
+            if idx[closest_idx] == cur_stimpos and e.key() == Qt.Key_Right and closest_idx <= len(idx):
+                closest_idx += 1
+            if e.key() == Qt.Key_Left:
+                closest_idx -= 1
+            if closest_idx < 0 or closest_idx >= len(idx):
+                return
+
+            self.state.setUnit(idx[closest_idx])
+       
+
 
 
 

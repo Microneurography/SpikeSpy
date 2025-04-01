@@ -299,20 +299,17 @@ class MdiView(QMainWindow):
         self.shortcut_del.activated.connect(lambda: self.state.setUnit(None))
 
         self.move_mode = "snap"
-
-        def move(dist=1):
+        
+        def move(dist=1, mode=None):
             cur_point = (
                 self.state.spike_groups[self.state.cur_spike_group].idx_arr[
                     self.state.stimno
                 ]
             )[0]
-            if self.move_mode == "snap":
-                from scipy.signal import find_peaks
-
-                dpts = self.state.get_erp()[self.state.stimno]
-                pts, _ = find_peaks(dpts)
-                pts_down, _ = find_peaks(-1 * dpts)
-                pts = np.sort(np.hstack([pts, pts_down]).flatten())
+            if mode is None:
+                mode = self.move_mode
+            if mode == "snap":
+                pts = self.state.get_peaks()[self.state.stimno]
                 i = pts.searchsorted(cur_point)
 
                 if dist > 0 and pts[i] != cur_point:

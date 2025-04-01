@@ -129,7 +129,7 @@ class tracked_neuron_unit:
         return p
 
 
-    def get_latencies(self, event_signal) -> pq.UnitTime:
+    def get_latencies(self, event_signal:pq.UnitTime) -> pq.UnitTime:
         """
         returns the latencies of the events in the spikegroup in ms.
         if the event is not in the spikegroup, it returns np.nan
@@ -138,9 +138,12 @@ class tracked_neuron_unit:
         
         """
         
-        p = np.ones(len(event_signal)) * np.nan * pq.ms
-        if len(self.event) == 0:
-            return p
+
+        next_spikes = np.searchsorted(self.event.times, event_signal).magnitude
+        next_spikes = np.clip(next_spikes, 0, len(self.event.times) - 1)
+        spike_times = self.event.times[next_spikes] - (np.asarray(event_signal)*event_signal.units)
+        spike_times = spike_times.rescale(pq.ms)
+        return spike_times
         for i,e in enumerate(event_signal):
             next_spike = np.searchsorted(self.event.times,e)
             if next_spike == len(self.event.times):
@@ -400,6 +403,23 @@ class ViewerState(QObject):
         # )
         return erp
 
+    from functools import lru_cache
+
+    _peaks = None
+    def get_peaks(self):
+        if self._peaks is not None:
+            return self._peaks
+        from scipy.signal import find_peaks
+        dpts = self.get_erp()
+        all_pts = []
+        for d in dpts:
+            pts, _ = find_peaks(d)
+            pts_down, _ = find_peaks(-1 * d)
+            pts = np.sort(np.hstack([pts, pts_down]).flatten())
+            all_pts.append(pts)
+        self._peaks = all_pts
+        return all_pts
+
     def set_window_size(self, window_size):
         self.window_size = window_size * pq.ms
         self._get_erp.cache_clear()
@@ -412,6 +432,7 @@ class ViewerState(QObject):
         spike_groups=None,
     ):
         self._get_erp.cache_clear()
+        self._peaks = None
         if analog_signal is not None:
             self.analog_signal = analog_signal
         if event_signal is not None:

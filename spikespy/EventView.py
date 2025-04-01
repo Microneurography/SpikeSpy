@@ -141,7 +141,10 @@ class EventView(QtWidgets.QWidget):
 
     def onStimNoChange(self):
         t = self.state.event_signal[self.state.stimno]
-        i = self.model.event.searchsorted(t)
+        diffs = t - self.model.event
+        diffs[diffs < 0] = np.inf * pq.s
+        i = np.argmin(diffs)
+        #i = self.model.event.searchsorted(t, side="right")-1
         self.ui.eventTableView.setCurrentIndex(self.model.index(i, 0))
 
     def onEventChange(self, index):

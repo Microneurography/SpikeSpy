@@ -151,7 +151,7 @@ class MultiAnalogSignal():
            
             
             sigs = [x[start_idx:]]
-            sigs+= self.signals[sig_start+1:sig_end]
+            sigs += self.signals[sig_start+1:sig_end]
             sigs += [x2[:stop_idx]]
             
             return MultiAnalogSignal(
