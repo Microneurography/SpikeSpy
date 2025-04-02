@@ -355,8 +355,8 @@ class SingleTraceView(QMainWindow):
             return
         else:
             bins = np.arange(
-                np.floor((min(values) // step)) * step,
-                np.ceil(max(values) + step),
+                np.floor(((np.min(values) // step))-1) * step,
+                np.ceil(np.max(values) + (step*2)),
                 step,
             )
         values_binned = np.histogram(values, bins=bins)
@@ -404,7 +404,7 @@ class SingleTraceView(QMainWindow):
             x.remove()
             del x
         self.topax_lines = []
-
+        
         lat = sg.get_latencies(np.array([cur_event_time]) * cur_event_time.units)[
             0
         ].rescale("s")
@@ -422,8 +422,12 @@ class SingleTraceView(QMainWindow):
             )
             self.identified_spike_line.set_visible(True)
             i = pts.searchsorted(cur_point)
-            i2 = pts[i - 1 : i + 1]
-            self.closest_pos = i2[np.argmin(np.abs(cur_point - i2))]
+            if i >0 and i < len(pts):
+                i2 = pts[i - 1 : i + 1]
+        
+
+                self.closest_pos = i2[np.argmin(np.abs(cur_point - i2))]
+
             self.topax_lines.append(
                 self.topax.axvline(lat, color="blue", animated=True)
             )
@@ -456,9 +460,10 @@ class SingleTraceView(QMainWindow):
         if self.conv is not None:
             conv = self.conv[self.state.stimno]
             conv_high = np.percentile(conv[1000:-1000], 99)
-            highlight = find_peaks(conv, conv_high)
-            hl = highlight[0][np.argsort(conv[highlight[0]])[::-1]]
-            for x in hl:
+            highlight,_ = find_peaks(conv, conv_high)
+            highlight = highlight -1
+            hl = highlight[np.argsort(conv[highlight])[::-1]]
+            for x in hl[0:100]:
                 self.topax_lines.append(
                     self.topax.axvline(
                         x / self.state.sampling_rate,
@@ -547,6 +552,7 @@ class SingleTraceView(QMainWindow):
             cur_stimpos = self.state.getUnitGroup().idx_arr[self.state.stimno][0]
             conv_high = np.percentile(self.conv[self.state.stimno][1000:-1000], 99)
             idx, _ = find_peaks(self.conv[self.state.stimno], conv_high)
+            idx = idx-1 # offset by one
             # idx = np.where(highlight)[0]
             closest_idx = np.searchsorted(idx, cur_stimpos)
             if (

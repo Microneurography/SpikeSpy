@@ -13,8 +13,7 @@ class QMatplotlib(QMainWindow):
 
     def __init__(self, state=None, parent=None, include_matplotlib_toolbar=False):
         super().__init__(parent)
-
-        self.setWindowTitle("Matplotlib Viewer")
+        self.settings = {}
 
         # Create a central widget
         central_widget = QWidget()
@@ -24,7 +23,7 @@ class QMatplotlib(QMainWindow):
         layout = QVBoxLayout(central_widget)
 
         # Create a Matplotlib figure and canvas
-        self.figure = Figure()
+        self.figure = Figure(layout="tight")
         self.canvas = FigureCanvas(self.figure)
 
         # Add the canvas to the layout
@@ -33,23 +32,33 @@ class QMatplotlib(QMainWindow):
         # Connect the click event handler
         self.canvas.mpl_connect('button_press_event', self.on_click)
 
+
+
+
         # Connect the plot update signal to the update_plot slot
         self.plot_update_signal.connect(self.update_figure)
 
         # Plot some example data
-        self.setup_figure()
+        
+        #self.setup_figure()
+        if state is not None:
+            self.setState(state)
 
         if include_matplotlib_toolbar:
             self.matplotlib_toolbar = NavigationToolbar2QT(self.canvas, self)
             self.addToolBar(self.matplotlib_toolbar)
 
+
+
+        
+
         # Create a toolbar
         toolbar = self.create_toolbar()
         if toolbar is not None:
+            if hasattr(self, 'matplotlib_toolbar'):
+                self.addToolBarBreak()
             self.addToolBar(toolbar)
 
-        if state is not None:
-            self.setState(state)
     
     def setState(self, state: ViewerState):
         self.state:ViewerState = state
@@ -57,6 +66,11 @@ class QMatplotlib(QMainWindow):
         self.state.onUnitGroupChange.connect(self.onUnitGroupChange)
         self.state.onLoadNewFile.connect(self.onLoadNewFile)
         self.plot_update_signal.emit(True)
+        if self.figure is not None:
+
+            self.figure.clear()
+            self.setup_figure()
+            self.update_figure()
     
     def onUnitChange(self):
         # Emit the plot update signal
@@ -84,7 +98,9 @@ class QMatplotlib(QMainWindow):
     def draw_figure(self):
         self.ax.plot([1, 2, 3, 4, 5], [1, 4, 9, 16, 25])
 
-
+    def on_limits_change(self, event_ax):
+        print(f"xlim changed to: {event_ax.get_xlim()}")
+        print(f"ylim changed to: {event_ax.get_ylim()}")
     def on_click(self, event):
         if event.inaxes:
             print(f"Clicked at x={event.xdata}, y={event.ydata}")
@@ -92,18 +108,26 @@ class QMatplotlib(QMainWindow):
     def update_figure(self, should_clear=False):
         # Implement the logic to update the plot
         if should_clear:
-            self.ax.clear()
+            self.figure.clear()
             self.setup_figure()
         self.draw_figure()
         self.canvas.draw()
         
 
     def get_settings(self):
-        return {
-        }
+        return self.settings
 
-    def set_settings(self, values):
-        self.setup_figure()
+    def set_settings(self, values, clear=False):
+        if clear:
+            self.settings = values
+        else:
+            for k, v in values.items():
+                self.settings[k] = v
+        
+        
+        #self.setup_figure()
+        self.update_figure()
+
 
 
 

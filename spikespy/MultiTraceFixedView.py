@@ -1,6 +1,7 @@
 import sys
 import numpy as np
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication,  QToolBar, QSpinBox
+from PySide6.QtGui import QAction
 from spikespy.QMatplotlib import QMatplotlib
 import matplotlib
 from matplotlib.ticker import Formatter
@@ -9,19 +10,25 @@ from spikespy.ViewerState import ViewerState
 import matplotlib.style as mplstyle
 mplstyle.use("fast")
 class MultiTraceFixedView(QMatplotlib):
-    settings = {
+
+    def __init__(self, parent=None,state: ViewerState=None):
+        self.connections = []
+        super().__init__(parent=parent,state=state,include_matplotlib_toolbar=True)
+        self.settings = {
             "n_lines_pre": 5,
             "n_lines_post": 5,
-            #"scale": None,
         }
-    def __init__(self, parent=None,state: ViewerState=None):
 
-        super().__init__(parent=parent,state=state,include_matplotlib_toolbar=True)
         
     def setState(self, state: ViewerState):
         super().setState(state)
-        self.state.onStimNoChange.connect(lambda x:self.update_figure())
+        self.unsetCons()
+        con = self.state.onStimNoChange.connect(lambda x:self.update_figure())
+        self.connections.append(con)
         self.set_scale_setting()
+
+        self.plot_update_signal.emit(True)
+        
     
     def set_scale_setting(self):
         if self.get_settings().get("scale") is None:
@@ -31,11 +38,73 @@ class MultiTraceFixedView(QMatplotlib):
     def onLoadNewFile(self):
         super().onLoadNewFile()
         
+    def create_toolbar(self):
+        toolbar = QToolBar("Settings")
+        # self.addToolBar(toolbar)
+
+        # Add a spinner with label "Scale"
+
+        scale_widget = QWidget()
+        scale_layout = QHBoxLayout(scale_widget)
+        scale_layout.setContentsMargins(0, 0, 0, 0)
+
+        scale_label = QLabel("Scale:")
+        scale_spinner = QDoubleSpinBox()
+        scale_spinner.setDecimals(5)
+        scale_spinner.setRange(0.00001, 100.0)
+        scale_spinner.setSingleStep(0.005)
+        scale_spinner.setValue(self.get_settings().get("scale", 1))
+        scale_spinner.valueChanged.connect(lambda value: self.set_settings({"scale": value}, update_spinners=False))
+        self.scale_spinner = scale_spinner
+
+        scale_layout.addWidget(scale_label)
+        scale_layout.addWidget(scale_spinner)
+        pre_label = QLabel("Pre:")
+        pre_spinner = QSpinBox()
+        pre_spinner.setRange(0, 100)
+        pre_spinner.setValue(self.get_settings().get("n_lines_pre", 5))
+        pre_spinner.valueChanged.connect(lambda value: self.set_settings({"n_lines_pre": value}, update_spinners=False))
+        self.pre_spinner = pre_spinner
+
+        post_label = QLabel("Post:")
+        post_spinner = QSpinBox()
+        post_spinner.setRange(0, 100)
+        post_spinner.setValue(self.get_settings().get("n_lines_post", 5))
+        post_spinner.valueChanged.connect(lambda value: self.set_settings({"n_lines_post": value}, update_spinners=False))
+        self.post_spinner = post_spinner
+
+        scale_layout.addWidget(pre_label)
+        scale_layout.addWidget(pre_spinner)
+        scale_layout.addWidget(post_label)
+        scale_layout.addWidget(post_spinner)
+        toolbar.addWidget(scale_widget)
+        return toolbar
+    def unsetCons(self):
+        for con in self.connections:
+            self.state.disconnect(connection=con)
+        self.connections = []
         
+    def __del__(self):
+        self.unsetCons()
+        super().__del__()
+
+    def set_settings(self, values, clear=False, update_spinners=True):
+        super().set_settings(values, clear)
+        if update_spinners:
+            self.post_spinner.setValue(self.get_settings().get("n_lines_post", 5))
+            self.pre_spinner.setValue(self.get_settings().get("n_lines_pre", 5))
+            self.scale_spinner.setValue(self.get_settings().get("scale", 1))
 
     def get_settings(self):
-        return self.settings 
+        return self.settings
     
+    def on_click(self, event):
+        if self.state is not None:
+            stimno = self.state.stimno
+            start = max(stimno-self.settings.get('n_lines_pre',0),0)
+            pos = np.round(event.ydata)
+            self.state.setStimNo(int(pos+start))
+        return super().on_click(event)
     def setup_figure(self):
         n_lines = self.get_settings().get("n_lines_pre", 10)
         n_lines_post = self.get_settings().get("n_lines_post", 10)
@@ -55,6 +124,7 @@ class MultiTraceFixedView(QMatplotlib):
         self.ax.xaxis.set_minor_formatter(CustomFormatter(self.ax))
         self.ax.set_ylim(n_lines + n_lines_post + 1 ,-1)
         self.ax.set_xlim(0, 0.5)
+        self.ax.callbacks.connect("ylim_changed", self.on_limits_change)
 
     def draw_figure(self):
         if self.state is None:
@@ -72,7 +142,7 @@ class MultiTraceFixedView(QMatplotlib):
         colors = []
         for i in range(len(dpts)):
             x = np.arange(erp.shape[-1]) / self.state.sampling_rate
-            y = (dpts[i] * scale) + i
+            y = (dpts[i] * scale*-1) + i
             segments.append(np.column_stack([x, y]))
             if i == stimno - start:
                 colors.append("purple")
@@ -88,16 +158,16 @@ class MultiTraceFixedView(QMatplotlib):
                 continue
             r = 20
             x = np.arange(sample_no-r, sample_no+r)
-            y = (dpts[i][x]*scale)+i
+            y = ((dpts[i][x]*scale)*-1)+i
             segments.append(np.column_stack([x/self.state.sampling_rate, y]))
             colors.append("red")
-            x_ys.append((float(l.magnitude),(dpts[i][sample_no]*scale)+i))
+            x_ys.append((float(l.magnitude),(dpts[i][sample_no]*scale*-1)+i))
         if self.points is not None:
             self.points.remove()
             self.points = None
         
         #print(x_ys)
-       
+        
 
         self.lines.set_segments(segments)
         self.lines.set_color(colors)
@@ -105,7 +175,15 @@ class MultiTraceFixedView(QMatplotlib):
            self.points=self.ax.scatter(*zip(*x_ys),s=10,color="black",zorder=10)
      
         self.ax.set_yticks(np.arange(0,len(dpts)),np.arange(start,stop))
+        self.ax.set_ylim( len(dpts),-1)
 
+    def on_limits_change(self, event_ax):
+        ylim = event_ax.get_ylim()
+        n_lines_pre = self.get_settings().get("n_lines_pre", 10)
+        n_lines_post = self.get_settings().get("n_lines_post", 10)
+
+        if (ylim[0] != n_lines_post + n_lines_pre + 1) or (ylim[1] != -1):
+            event_ax.set_ylim(n_lines_post + n_lines_pre + 1, -1)
 
 class CustomFormatter(Formatter):
     def __init__(self, ax):
@@ -131,6 +209,7 @@ import sys
 import time
 from PySide6.QtWidgets import QApplication, QMainWindow
 from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QLabel, QDoubleSpinBox, QHBoxLayout, QWidget
 
 # Assuming MultiLinePlot and ViewerState are defined in the same module
 

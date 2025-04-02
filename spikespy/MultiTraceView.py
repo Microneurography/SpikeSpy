@@ -85,7 +85,10 @@ class falling_leaf_plotter:
             ylim=[0,erp.shape[0]]
         if mode == "heatmap":
             if self.ax_track_leaf is not None:
-                self.ax_track_leaf.remove()
+                try:
+                    self.ax_track_leaf.remove()
+                except:
+                    pass
                 self.ax_track_leaf = None
 
             if self.ax_track_cmap is not None:
@@ -450,7 +453,8 @@ class MultiTraceView(QMainWindow):
         if self.state is not None:
             for ref in self.references:
                 self.state.disconnect(ref)
-            
+    
+    
 
     def set_state(self, state):
         self.state = state
@@ -781,6 +785,10 @@ class MultiTraceView(QMainWindow):
         # if e.inaxes == self.ax:
         self.state.setStimNo(round(e.ydata))
 
+    def __del__(self):
+        self.remove_references()
+        self.close_conn.disconnect()
+        super().__del__()
 
 
 

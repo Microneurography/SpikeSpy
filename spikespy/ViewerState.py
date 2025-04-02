@@ -141,8 +141,12 @@ class tracked_neuron_unit:
 
         next_spikes = np.searchsorted(self.event.times, event_signal).magnitude
         next_spikes = np.clip(next_spikes, 0, len(self.event.times) - 1)
+        if len(self.event.times) == 0:
+            return np.ones(len(event_signal))* np.nan * pq.ms   
         spike_times = self.event.times[next_spikes] - (np.asarray(event_signal)*event_signal.units)
+        
         spike_times = spike_times.rescale(pq.ms)
+        spike_times[spike_times < (0*pq.s)] = np.nan*pq.ms
         return spike_times
         for i,e in enumerate(event_signal):
             next_spike = np.searchsorted(self.event.times,e)
