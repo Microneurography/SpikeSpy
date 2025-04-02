@@ -43,7 +43,7 @@ import time
 mplstyle.use("fast")
 
 from matplotlib.axes import Axes
-
+from .helpers import qsignal_throttle_wrapper
 
 class falling_leaf_plotter:
     def __init__(self):
@@ -337,6 +337,7 @@ class MultiTraceView(QMainWindow):
         self.update_axis()
         self.blit()
 
+        #@qsignal_throttle_wrapper(interval=33)
         def draw_evt(evt):
             self.blit()
             self.render()
@@ -477,6 +478,7 @@ class MultiTraceView(QMainWindow):
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
 
+    @qsignal_throttle_wrapper(1000)
     def reset_right_axes_data(self):
         if self.state is None:
             return
@@ -510,6 +512,8 @@ class MultiTraceView(QMainWindow):
                 pass
 
         self.rightPlots = {k: True for k, v in self.right_ax_data.items()}
+        if self.settingsDialog is not None:
+            self.settingsDialog.destroy()
         self.settingsDialog = DialogSignalSelect(options=self.rightPlots)
 
         def updateView(k, v):
@@ -582,7 +586,8 @@ class MultiTraceView(QMainWindow):
         self.fig.tight_layout()
         return [x for x in [self.ax_track_cmap, self.ax_track_leaf] if x is not None]
         # self.view.draw_idle()
-
+    
+    @qsignal_throttle_wrapper(1000)
     def plot_right_axis(self):
         for ax in self.ax_right:
             ax.remove()
@@ -609,12 +614,12 @@ class MultiTraceView(QMainWindow):
             self.ax_right[i].set_xlabel(label)
             self.ax_right[i].xaxis.label.set_color(c)
             self.ax_right[i].tick_params(axis="y", colors=c)
-        # for ax in self.ax_right:
-        #     try:
-        #         ax.draw_idle()
-        #     except:
-        #         pass
-        self.view.draw_idle()  # TODO - this slows things down as it re-renders the image plot also.
+        for ax in self.ax_right:
+            try:
+                ax.draw(self.fig.canvas.get_renderer())
+            except:
+                pass
+        #self.view.draw_idle()  # TODO - this slows things down as it re-renders the image plot also.
 
     def update_ylim(self, curStim):
         if self.lock_to_stim:
@@ -687,7 +692,6 @@ class MultiTraceView(QMainWindow):
 
     points_spikegroups = None
 
-    @Slot()
     def plot_spikegroups(self, sgidx=None):
         if self.points_spikegroups is None:
             pass  # TODO optimisation of setting x_data rather than replotting
@@ -732,9 +736,13 @@ class MultiTraceView(QMainWindow):
         # self.fig.canvas.draw()
         self.blit_data = self.fig.canvas.copy_from_bbox(self.ax.bbox)
 
+
+    
+    #@qsignal_throttle_wrapper(interval=33)
     def render(self):
 
         # self.view.draw_idle()
+        
         self.fig.canvas.restore_region(self.blit_data)
         o = self.plot_curstim_line(self.state.stimno)
         
@@ -750,31 +758,7 @@ class MultiTraceView(QMainWindow):
 
     def plot_curstim_line(self, stimNo=None):
         return [self.plotter.highlight_stim(self.ax,stimNo,partial=False)]
-        return
-        if stimNo is None:
-            return
-        if self.hline is not None:
-            del self.hline
 
-        if self.mode == "lines":
-            from matplotlib import lines
-
-            op: lines.Line2D = self.ax_track_leaf[stimNo]
-
-            self.hline = lines.Line2D(*self.ax_track_leaf[stimNo].get_data())
-            self.hline.update_from(op)
-            self.hline.set_color("purple")
-        else:
-            self.hline = self.ax.axhline(stimNo)
-        self.hline.set_animated(True)
-
-        self.ax.draw_artist(self.hline)
-
-        # self.view.draw_idle()
-        # self.ax_track_cmap.draw()
-        # self.view.draw_idle()
-        # self.view.update()
-        return [self.hline]
 
 
     @Slot()

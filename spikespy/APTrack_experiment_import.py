@@ -537,7 +537,7 @@ def find_square_pulse(arr, width, threshold):
 
     out_i = 0
     prev = 0
-    max_val = 0
+    max_val = 0 
     i = 0
     sum_val = np.sum(arr[0:width])
     for x in range(arr.shape[0]):
