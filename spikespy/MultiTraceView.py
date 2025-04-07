@@ -30,7 +30,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFormLayout,
     QDoubleSpinBox,
-
 )
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer
@@ -40,10 +39,12 @@ from .ViewerState import ViewerState, tracked_neuron_unit
 from .QMatplotlib import QMatplotlib
 from matplotlib.lines import Line2D
 import time
+
 mplstyle.use("fast")
 
 from matplotlib.axes import Axes
 from .helpers import qsignal_throttle_wrapper
+
 
 class falling_leaf_plotter:
     def __init__(self):
@@ -81,8 +82,8 @@ class falling_leaf_plotter:
             im_data = erp[ylim[0] : ylim[1], xlim[0] : xlim[1]]
         else:
             im_data = erp
-            xlim=[0,erp.shape[1]]
-            ylim=[0,erp.shape[0]]
+            xlim = [0, erp.shape[1]]
+            ylim = [0, erp.shape[0]]
         if mode == "heatmap":
             if self.ax_track_leaf is not None:
                 try:
@@ -101,7 +102,7 @@ class falling_leaf_plotter:
             ax.set_autoscale_on(False)
 
             self.ax_track_cmap = ax.imshow(
-                np.clip(im_data,0,np.max(im_data)),
+                np.clip(im_data, 0, np.max(im_data)),
                 aspect="auto",
                 cmap="gray_r",
                 clim=(self.percentiles[40], self.percentiles[95]),
@@ -192,7 +193,6 @@ class falling_leaf_plotter:
         ax.draw_artist(scat)
 
 
-
 class MultiTraceView(QMainWindow):
     right_ax_data = {}
 
@@ -212,15 +212,13 @@ class MultiTraceView(QMainWindow):
         self.hline = None
         self.figcache = None
         self.references = []
-        
+
         # throttle the update for upateAll to every 500ms when using the comboboxes.
         self.update_timer = QTimer()
         self.update_timer.setSingleShot(True)
         self.update_timer.timeout.connect(self.updateAll)
         self.update_timer.setInterval(500)
         self.close_conn = self.destroyed.connect(lambda: self.closeEvent())
-        
-        
 
         xsize = 1024
         ysize = 480
@@ -340,7 +338,7 @@ class MultiTraceView(QMainWindow):
         self.update_axis()
         self.blit()
 
-        #@qsignal_throttle_wrapper(interval=33)
+        # @qsignal_throttle_wrapper(interval=33)
         def draw_evt(evt):
             self.blit()
             self.render()
@@ -424,7 +422,7 @@ class MultiTraceView(QMainWindow):
             self.pg_selector._selection_completed = False
             self.pg_selector.set_visible(True)
             self.dialogPolySelect.show()
-            #self.dialogPolySelect.activate()
+            # self.dialogPolySelect.activate()
         else:
             self.pg_selector._selection_completed = True
             self.pg_selector.clear()
@@ -449,34 +447,44 @@ class MultiTraceView(QMainWindow):
         self.settingsDialog.close()
         self.pg_selector.set_active(False)
 
-    def remove_references(self,*args,**kwargs):
+    def remove_references(self, *args, **kwargs):
         if self.state is not None:
             for ref in self.references:
                 self.state.disconnect(ref)
-    
-    
 
     def set_state(self, state):
         self.state = state
-        
+
         self.remove_references()
-        
 
         if self.state is None:
             return
-        
-        self.references.append(self.state.onLoadNewFile.connect(self.reset_right_axes_data))
+
+        self.references.append(
+            self.state.onLoadNewFile.connect(self.reset_right_axes_data)
+        )
         self.references.append(self.state.onLoadNewFile.connect(self.setup_figure))
         self.references.append(self.state.onLoadNewFile.connect(self.update_axis))
 
-        self.references.append(self.state.onUnitGroupChange.connect(lambda *args: self.render()))
-        self.references.append(self.state.onUnitChange.connect(lambda *args: self.render()))
-        self.references.append(self.state.onUnitGroupChange.connect(lambda *args: self.reset_right_axes_data()))
+        self.references.append(
+            self.state.onUnitGroupChange.connect(lambda *args: self.render())
+        )
+        self.references.append(
+            self.state.onUnitChange.connect(lambda *args: self.render())
+        )
+        self.references.append(
+            self.state.onUnitGroupChange.connect(
+                lambda *args: self.reset_right_axes_data()
+            )
+        )
 
         self.references.append(self.state.onStimNoChange.connect(self.update_ylim))
-        self.references.append(self.state.onStimNoChange.connect(lambda *args: self.render()))
-        self.references.append(self.state.onUnitChange.connect(lambda x: self.reset_right_axes_data()))
-
+        self.references.append(
+            self.state.onStimNoChange.connect(lambda *args: self.render())
+        )
+        self.references.append(
+            self.state.onUnitChange.connect(lambda x: self.reset_right_axes_data())
+        )
 
         self.update_axis()
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
@@ -537,11 +545,13 @@ class MultiTraceView(QMainWindow):
 
         # self.ax_right_fig.clear()
         erp = self.state.get_erp()
-        erp = np.clip(erp,0, np.max(erp))
+        erp = np.clip(erp, 0, np.max(erp))
         self.percentiles = np.percentile(erp, np.arange(100))
         self.ax.clear()
-        self.plotter.setup(self.ax,erp,sampling_rate=self.state.sampling_rate,mode=mode)
-        self.plotter.plot_main(mode=self.mode,ax=self.ax,erp=erp, partial=False)
+        self.plotter.setup(
+            self.ax, erp, sampling_rate=self.state.sampling_rate, mode=mode
+        )
+        self.plotter.plot_main(mode=self.mode, ax=self.ax, erp=erp, partial=False)
         # if self.ax_track_leaf is not None:
         #     [x.remove() for x in self.ax_track_leaf]
         #     self.ax_track_leaf = None
@@ -590,7 +600,7 @@ class MultiTraceView(QMainWindow):
         self.fig.tight_layout()
         return [x for x in [self.ax_track_cmap, self.ax_track_leaf] if x is not None]
         # self.view.draw_idle()
-    
+
     @qsignal_throttle_wrapper(1000)
     def plot_right_axis(self):
         for ax in self.ax_right:
@@ -623,7 +633,7 @@ class MultiTraceView(QMainWindow):
                 ax.draw(self.fig.canvas.get_renderer())
             except:
                 pass
-        #self.view.draw_idle()  # TODO - this slows things down as it re-renders the image plot also.
+        # self.view.draw_idle()  # TODO - this slows things down as it re-renders the image plot also.
 
     def update_ylim(self, curStim):
         if self.lock_to_stim:
@@ -640,8 +650,9 @@ class MultiTraceView(QMainWindow):
             return
         if self.state.analog_signal is None:
             return
-        self.ax.set_ylim( len(self.state.event_signal),0)
+        self.ax.set_ylim(len(self.state.event_signal), 0)
         self.ax.set_xlim(0, len(self.state.analog_signal_erp[0]))
+
         class CustomFormatter(matplotlib.ticker.Formatter):
             def __init__(self, ax, func):
                 super().__init__()
@@ -740,16 +751,14 @@ class MultiTraceView(QMainWindow):
         # self.fig.canvas.draw()
         self.blit_data = self.fig.canvas.copy_from_bbox(self.ax.bbox)
 
-
-    
-    #@qsignal_throttle_wrapper(interval=33)
+    # @qsignal_throttle_wrapper(interval=33)
     def render(self):
 
         # self.view.draw_idle()
-        
+
         self.fig.canvas.restore_region(self.blit_data)
         o = self.plot_curstim_line(self.state.stimno)
-        
+
         o2 = self.plot_spikegroups()
 
         self.view.update()
@@ -761,9 +770,7 @@ class MultiTraceView(QMainWindow):
         # self.view.update()
 
     def plot_curstim_line(self, stimNo=None):
-        return [self.plotter.highlight_stim(self.ax,stimNo,partial=False)]
-
-
+        return [self.plotter.highlight_stim(self.ax, stimNo, partial=False)]
 
     @Slot()
     def updateAll(self):
@@ -789,8 +796,6 @@ class MultiTraceView(QMainWindow):
         self.remove_references()
         self.close_conn.disconnect()
         super().__del__()
-
-
 
 
 class LineSelector(PolygonSelector):

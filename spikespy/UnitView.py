@@ -115,7 +115,7 @@ class UnitView(QMainWindow):
         sig_erp = self.state.analog_signal_erp
         idx_arr = sg.idx_arr
         self.lines = {}
-        ylims = [-0.1,0.1]
+        ylims = [-0.1, 0.1]
         for i, idx, d in zip(range(len(sig_erp)), idx_arr, sig_erp):
 
             if idx is None:
@@ -139,7 +139,6 @@ class UnitView(QMainWindow):
         lc = LineCollection(self.lines.values(), alpha=0.3, color="gray")
         ax.add_artist(lc)
         ax.set_ylim(ylims)
-        
 
         self.view.draw_idle()
 

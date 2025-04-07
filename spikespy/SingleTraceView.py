@@ -50,6 +50,7 @@ from .processing import create_erp_signals
 from .ViewerState import ViewerState
 import quantities as pq
 from matplotlib.ticker import Formatter
+
 mplstyle.use("fast")
 
 
@@ -120,9 +121,6 @@ class updateConv(QRunnable):  # this is being called too many times currently.
         self.cancelled = True
 
 
-
-
-
 # Custom formatter class
 
 
@@ -168,23 +166,18 @@ class SingleTraceView(QMainWindow):
         self.setCentralWidget(self.view)
 
         # connect to signals
-        self.updateFigure = qsignal_throttle(self.updateFigure_core, 33)
-
+        self.updateFigure = qsignal_throttle(self.updateFigure_core, 3)
 
         self.updateHistogram = qsignal_throttle(self.updateHistogram_core, 1000)
 
-        self.state.onLoadNewFile.connect( self.updateFigure)
+        self.state.onLoadNewFile.connect(self.updateFigure)
 
-        self.state.onUnitChange.connect( self.updateFigure)
-        self.state.onUnitChange.connect(
-             self.updateHistogram
-        )
+        self.state.onUnitChange.connect(self.updateFigure)
+        self.state.onUnitChange.connect(self.updateHistogram)
 
-        self.state.onUnitGroupChange.connect( self.updateFigure)
-        self.state.onUnitGroupChange.connect(
-            self.updateHistogram
-        )
-        self.state.onStimNoChange.connect( self.updateFigure)
+        self.state.onUnitGroupChange.connect(self.updateFigure)
+        self.state.onUnitGroupChange.connect(self.updateHistogram)
+        self.state.onStimNoChange.connect(self.updateFigure)
 
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
         # self.fig.canvas.mpl_connect('key_press_event', self.keyPressEvent)
@@ -355,8 +348,8 @@ class SingleTraceView(QMainWindow):
             return
         else:
             bins = np.arange(
-                np.floor(((np.min(values) // step))-1) * step,
-                np.ceil(np.max(values) + (step*2)),
+                np.floor(((np.min(values) // step)) - 1) * step,
+                np.ceil(np.max(values) + (step * 2)),
                 step,
             )
         values_binned = np.histogram(values, bins=bins)
@@ -364,7 +357,7 @@ class SingleTraceView(QMainWindow):
             values_binned[1][1:] / 1000,
             values_binned[0] / max(values_binned[0]),
             color="gray",
-            animated=True
+            animated=True,
         )
 
     # @Slot()
@@ -404,7 +397,7 @@ class SingleTraceView(QMainWindow):
             x.remove()
             del x
         self.topax_lines = []
-        
+
         lat = sg.get_latencies(np.array([cur_event_time]) * cur_event_time.units)[
             0
         ].rescale("s")
@@ -422,9 +415,8 @@ class SingleTraceView(QMainWindow):
             )
             self.identified_spike_line.set_visible(True)
             i = pts.searchsorted(cur_point)
-            if i >0 and i < len(pts):
+            if i > 0 and i < len(pts):
                 i2 = pts[i - 1 : i + 1]
-        
 
                 self.closest_pos = i2[np.argmin(np.abs(cur_point - i2))]
 
@@ -460,8 +452,8 @@ class SingleTraceView(QMainWindow):
         if self.conv is not None:
             conv = self.conv[self.state.stimno]
             conv_high = np.percentile(conv[1000:-1000], 99)
-            highlight,_ = find_peaks(conv, conv_high)
-            highlight = highlight -1
+            highlight, _ = find_peaks(conv, conv_high)
+            highlight = highlight - 1
             hl = highlight[np.argsort(conv[highlight])[::-1]]
             for x in hl[0:100]:
                 self.topax_lines.append(
@@ -482,7 +474,6 @@ class SingleTraceView(QMainWindow):
         # self.scatter_peaks2 = self.ax.scatter(pts_down, dpts[pts_down], color="black", marker="x")
         self.draw_histogram()
 
-
         self.fig.canvas.restore_region(self.blit_data)
         self.fig.canvas.restore_region(self.blit_data_topax)
 
@@ -497,7 +488,6 @@ class SingleTraceView(QMainWindow):
         # for x in self.topax.lines:
         #     self.topax.draw_artist(x)
         self.view.update()
-
 
     def blit(self):
         self.blit_data = self.fig.canvas.copy_from_bbox(self.ax.bbox)
@@ -552,7 +542,7 @@ class SingleTraceView(QMainWindow):
             cur_stimpos = self.state.getUnitGroup().idx_arr[self.state.stimno][0]
             conv_high = np.percentile(self.conv[self.state.stimno][1000:-1000], 99)
             idx, _ = find_peaks(self.conv[self.state.stimno], conv_high)
-            idx = idx-1 # offset by one
+            idx = idx - 1  # offset by one
             # idx = np.where(highlight)[0]
             closest_idx = np.searchsorted(idx, cur_stimpos)
             if (

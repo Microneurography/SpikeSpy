@@ -7,6 +7,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvas, NavigationToolbar2QT
 
 from spikespy.ViewerState import ViewerState
 
+
 class QMatplotlib(QMainWindow):
     # Define a custom signal for updating the plot
     plot_update_signal = Signal(bool)
@@ -30,17 +31,14 @@ class QMatplotlib(QMainWindow):
         layout.addWidget(self.canvas)
 
         # Connect the click event handler
-        self.canvas.mpl_connect('button_press_event', self.on_click)
-
-
-
+        self.canvas.mpl_connect("button_press_event", self.on_click)
 
         # Connect the plot update signal to the update_plot slot
         self.plot_update_signal.connect(self.update_figure)
 
         # Plot some example data
-        
-        #self.setup_figure()
+
+        # self.setup_figure()
         if state is not None:
             self.setState(state)
 
@@ -48,20 +46,15 @@ class QMatplotlib(QMainWindow):
             self.matplotlib_toolbar = NavigationToolbar2QT(self.canvas, self)
             self.addToolBar(self.matplotlib_toolbar)
 
-
-
-        
-
         # Create a toolbar
         toolbar = self.create_toolbar()
         if toolbar is not None:
-            if hasattr(self, 'matplotlib_toolbar'):
+            if hasattr(self, "matplotlib_toolbar"):
                 self.addToolBarBreak()
             self.addToolBar(toolbar)
 
-    
     def setState(self, state: ViewerState):
-        self.state:ViewerState = state
+        self.state: ViewerState = state
         self.state.onUnitChange.connect(self.onUnitChange)
         self.state.onUnitGroupChange.connect(self.onUnitGroupChange)
         self.state.onLoadNewFile.connect(self.onLoadNewFile)
@@ -71,7 +64,7 @@ class QMatplotlib(QMainWindow):
             self.figure.clear()
             self.setup_figure()
             self.update_figure()
-    
+
     def onUnitChange(self):
         # Emit the plot update signal
         self.plot_update_signal.emit(False)
@@ -94,13 +87,14 @@ class QMatplotlib(QMainWindow):
 
     def setup_figure(self):
         self.ax = self.figure.add_subplot(111)
-    
+
     def draw_figure(self):
         self.ax.plot([1, 2, 3, 4, 5], [1, 4, 9, 16, 25])
 
     def on_limits_change(self, event_ax):
         print(f"xlim changed to: {event_ax.get_xlim()}")
         print(f"ylim changed to: {event_ax.get_ylim()}")
+
     def on_click(self, event):
         if event.inaxes:
             print(f"Clicked at x={event.xdata}, y={event.ydata}")
@@ -112,7 +106,6 @@ class QMatplotlib(QMainWindow):
             self.setup_figure()
         self.draw_figure()
         self.canvas.draw()
-        
 
     def get_settings(self):
         return self.settings
@@ -123,12 +116,9 @@ class QMatplotlib(QMainWindow):
         else:
             for k, v in values.items():
                 self.settings[k] = v
-        
-        
-        #self.setup_figure()
+
+        # self.setup_figure()
         self.update_figure()
-
-
 
 
 if __name__ == "__main__":

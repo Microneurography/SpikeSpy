@@ -1,10 +1,11 @@
 import importlib.metadata
 import requests
 from PySide6.QtCore import QObject, QThread, Signal, Slot
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel,QScrollArea, QFrame
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QScrollArea, QFrame
 from PySide6.QtCore import Qt
 
-def check_github_releases(repo= "Microneurography/SpikeSpy", current_version=None):
+
+def check_github_releases(repo="Microneurography/SpikeSpy", current_version=None):
     """
     Check the GitHub repository for new releases and get the release notes.
 
@@ -21,18 +22,21 @@ def check_github_releases(repo= "Microneurography/SpikeSpy", current_version=Non
         import importlib
 
         current_version = importlib.metadata.version("spikespy")
-    
+
     if response.status_code == 200:
         latest_release = response.json()
-        latest_version = latest_release['tag_name']
-        release_notes = latest_release['body']
-        
-        if latest_version != current_version and latest_version!=("v"+current_version):
+        latest_version = latest_release["tag_name"]
+        release_notes = latest_release["body"]
+
+        if latest_version != current_version and latest_version != (
+            "v" + current_version
+        ):
             return latest_version, release_notes
         else:
             return None
     else:
         response.raise_for_status()
+
 
 class ReleaseNotesDialog(QDialog):
     def __init__(self, version, release_notes):
@@ -42,14 +46,13 @@ class ReleaseNotesDialog(QDialog):
         version_label = QLabel(f"Version: {version}")
         release_notes_label = QLabel(release_notes)
 
-
         scroll_area = QScrollArea()
         scroll_area.setWidget(release_notes_label)
         layout.addWidget(version_label)
         layout.addWidget(scroll_area)
-        
-        
+
         self.setLayout(layout)
+
 
 class VersionCheckWorker(QObject):
     finished = Signal()

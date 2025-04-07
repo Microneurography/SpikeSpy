@@ -27,7 +27,11 @@ from PySide6.QtWidgets import (
 )
 from neo.core.objectlist import ObjectList
 
-from .APTrack_experiment_import import process_folder as open_aptrack, APTrackRecording, TypeID
+from .APTrack_experiment_import import (
+    process_folder as open_aptrack,
+    APTrackRecording,
+    TypeID,
+)
 from .NeoOpenEphyisIO import open_ephys_to_neo
 from .processing import create_erp_signals
 
@@ -36,7 +40,7 @@ class lru_numpy_memmap:
     def __init__(self):
         self.cache_dir = tempfile.gettempdir()
         self.cache_dict = {}
-        self.data_cache={}
+        self.data_cache = {}
 
     def clear_cache(self):
         for k, v in self.cache_dict.items():
@@ -44,7 +48,6 @@ class lru_numpy_memmap:
             Path(v).unlink()
         self.cache_dict = {}
         self.data_cache = {}
-        
 
     def __call__(
         self,
@@ -92,12 +95,16 @@ class tracked_neuron_unit:
 
     @property
     def idx_arr(self):
-        logging.warning("Accessing idx_arr is deprecated and will be removed in future versions. use get_latencies instead")
+        logging.warning(
+            "Accessing idx_arr is deprecated and will be removed in future versions. use get_latencies instead"
+        )
         return self._idx_arr
 
     @idx_arr.setter
     def idx_arr(self, value):
-        logging.warning("Setting idx_arr is deprecated and will be removed in future versions.")
+        logging.warning(
+            "Setting idx_arr is deprecated and will be removed in future versions."
+        )
         self._idx_arr = value
 
     fibre_type: str = ""
@@ -114,8 +121,6 @@ class tracked_neuron_unit:
         if len(idx_arr_filt) == 0:
             return None
         return (int(min(idx_arr_filt)), int(max(idx_arr_filt)))
-        
-
 
     def get_idx_arr(self, event_signal, signal_chan):
         p = [None for x in range(len(event_signal))]
@@ -128,28 +133,28 @@ class tracked_neuron_unit:
             )
         return p
 
-
-    def get_latencies(self, event_signal:pq.UnitTime) -> pq.UnitTime:
+    def get_latencies(self, event_signal: pq.UnitTime) -> pq.UnitTime:
         """
         returns the latencies of the events in the spikegroup in ms.
         if the event is not in the spikegroup, it returns np.nan
 
         note: this will only return one latency per event, if there are multiple events in the same time, it will only return the first one.
-        
+
         """
-        
 
         next_spikes = np.searchsorted(self.event.times, event_signal).magnitude
         next_spikes = np.clip(next_spikes, 0, len(self.event.times) - 1)
         if len(self.event.times) == 0:
-            return np.ones(len(event_signal))* np.nan * pq.ms   
-        spike_times = self.event.times[next_spikes] - (np.asarray(event_signal)*event_signal.units)
-        
+            return np.ones(len(event_signal)) * np.nan * pq.ms
+        spike_times = self.event.times[next_spikes] - (
+            np.asarray(event_signal) * event_signal.units
+        )
+
         spike_times = spike_times.rescale(pq.ms)
-        spike_times[spike_times < (0*pq.s)] = np.nan*pq.ms
+        spike_times[spike_times < (0 * pq.s)] = np.nan * pq.ms
         return spike_times
-        for i,e in enumerate(event_signal):
-            next_spike = np.searchsorted(self.event.times,e)
+        for i, e in enumerate(event_signal):
+            next_spike = np.searchsorted(self.event.times, e)
             if next_spike == len(self.event.times):
                 continue
             p[i] = (self.event.times[next_spike] - e).rescale(pq.ms)
@@ -157,7 +162,7 @@ class tracked_neuron_unit:
         # for e in self.event.times:
         #     i = np.searchsorted(event_signal, e) - 1
         #     p[i] = (e - event_signal[i]).rescale(pq.ms)
-        return p 
+        return p
 
 
 class ViewerState(QObject):
@@ -249,7 +254,9 @@ class ViewerState(QObject):
             evt2.name = evt.name
             self.spike_groups[self.cur_spike_group].event = evt2
 
-        self.spike_groups[self.cur_spike_group].event.sort() # TODO: not sure if this breaks the array annotations.
+        self.spike_groups[
+            self.cur_spike_group
+        ].event.sort()  # TODO: not sure if this breaks the array annotations.
 
         self.onUnitChange.emit(stimno)
 
@@ -325,6 +332,7 @@ class ViewerState(QObject):
 
     def removeUnitGroup(self):
         pass
+
     @Slot()
     def addUnitGroup(self):
         self.spike_groups.append(tracked_neuron_unit(event=Event()))
@@ -354,12 +362,12 @@ class ViewerState(QObject):
                 if e > self.analog_signal.t_stop:
                     continue
                 try:
-                    v=self.analog_signal.time_slice(e, e + 1 * pq.ms)[0]
+                    v = self.analog_signal.time_slice(e, e + 1 * pq.ms)[0]
                 except:
-                    v=None
+                    v = None
                 if (e - self.event_signal[i]) > self.window_size:
                     continue
-                p[i] = (x,v)
+                p[i] = (x, v)
 
             sg.idx_arr = p
 
@@ -393,9 +401,7 @@ class ViewerState(QObject):
     ):
         signal = self.segment.analogsignals[signal_idx]
         event_signal = self.segment.events[event_signal_idx]
-        erp = create_erp_signals(
-            signal, event_signal,0*pq.s, window_size*pq.s
-        )
+        erp = create_erp_signals(signal, event_signal, 0 * pq.s, window_size * pq.s)
 
         # s = int(np.array(signal.sampling_rate.base) // ((1 / window_size)))
         # erp = create_erp(
@@ -410,10 +416,12 @@ class ViewerState(QObject):
     from functools import lru_cache
 
     _peaks = None
+
     def get_peaks(self):
         if self._peaks is not None:
             return self._peaks
         from scipy.signal import find_peaks
+
         dpts = self.get_erp()
         all_pts = []
         for d in dpts:
@@ -451,7 +459,6 @@ class ViewerState(QObject):
             analog_signal = neo.AnalogSignal([], pq.mV, sampling_rate=1 * pq.Hz)
         if self.event_signal is None:
             event_signal = neo.Event()
-
 
         self.sampling_rate = int(np.array(self.analog_signal.sampling_rate.magnitude))
         if len(self.spike_groups) == 0:
@@ -536,20 +543,21 @@ def load_file(data_path, type="h5", **kwargs):
 
         config = d.get_config()
         t = config.pop("record")
-        
-        # HACK: Add DS4 channels 
-        DS4_channels = [APTrackRecording(
-                    "ADC2",
-                    TypeID.TTL,
-                    "env.ds4.stimVolt",
-                    "The DS5 1V per 10mA",
-        ),
-        APTrackRecording(
-                    "ADC2",
-                    TypeID.ANALOG,
-                    "env.ds4.stimVolt",
-                    "The DS5 1V per 10mA",
-        )
+
+        # HACK: Add DS4 channels
+        DS4_channels = [
+            APTrackRecording(
+                "ADC2",
+                TypeID.TTL,
+                "env.ds4.stimVolt",
+                "The DS5 1V per 10mA",
+            ),
+            APTrackRecording(
+                "ADC2",
+                TypeID.ANALOG,
+                "env.ds4.stimVolt",
+                "The DS5 1V per 10mA",
+            ),
         ]
 
         data = open_aptrack(data_path, t, config, DS4_channels)
@@ -557,15 +565,24 @@ def load_file(data_path, type="h5", **kwargs):
         # data = blk.segments[0]
     elif type == "spike2":
         data = neo.Spike2IO(data_path)
-    if isinstance(data, (list,ObjectList)): # multiple segments
+    if isinstance(data, (list, ObjectList)):  # multiple segments
         # create multianalogsignals if there are segments labeled as "ERP"
-        final_sig = next(x for x in data if x.name != "ERP" and x.annotations.get("class_","")!="multianalogsignal")
+        final_sig = next(
+            x
+            for x in data
+            if x.name != "ERP"
+            and x.annotations.get("class_", "") != "multianalogsignal"
+        )
         for seg in data:
             from .processing import MultiAnalogSignal
-            if seg.name == "ERP" or seg.annotations.get("class_","")=="multianalogsignal":
+
+            if (
+                seg.name == "ERP"
+                or seg.annotations.get("class_", "") == "multianalogsignal"
+            ):
                 erp = MultiAnalogSignal(seg.analogsignals)
                 final_sig.analogsignals.append(erp)
-                
+
         data = final_sig
     if len(data.events) == 0:
         event_signal = Event()
@@ -576,8 +593,10 @@ def load_file(data_path, type="h5", **kwargs):
     spike_event_groups = []
 
     for x in data.events:
-        x:Event = x
-        if (not x.name.startswith("unit") ) and (x.annotations.get("type",'')!="unit"):
+        x: Event = x
+        if (not x.name.startswith("unit")) and (
+            x.annotations.get("type", "") != "unit"
+        ):
             continue
         # info = x.times[:,np.newaxis]-event_signal
         # p = [None for x in range(len(event_signal))]
@@ -594,7 +613,7 @@ def prompt_for_neo_file(type):
             None,
             "Select file type",
             "Filetype",
-            ["h5", "openEphys", "APTrack", "matlab", "spike2","nwb"],
+            ["h5", "openEphys", "APTrack", "matlab", "spike2", "nwb"],
         )[0]
 
     if type in ("h5", "spike2", "nwb"):

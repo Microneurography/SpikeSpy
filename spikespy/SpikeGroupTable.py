@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QTableView,
     QVBoxLayout,
     QWidget,
-    QStyledItemDelegate
+    QStyledItemDelegate,
 )
 
 from .ViewerState import ViewerState
@@ -53,7 +53,6 @@ class SpikeGroupTableView(QWidget):
         self.addButton.clicked.connect(self.state.addUnitGroup)
         self.removeButton = QPushButton("-")
         self.removeButton.clicked.connect(self.state.removeUnitGroup)
-        
 
         vlayout = QVBoxLayout()
         vlayout.addWidget(self.tbl)
@@ -94,6 +93,7 @@ class ComboBoxDelegate(QStyledItemDelegate):
 
     def setModelData(self, editor, model, index):
         model.setData(index, editor.currentText(), Qt.EditRole)
+
 
 class SpikeGroupTableModel(QAbstractTableModel):
     def __init__(self, spikegroups_func=None):
@@ -162,23 +162,23 @@ class SpikeGroupTableModel(QAbstractTableModel):
             column = index.column()
             row = index.row()
             sg = self.spikegroups_func()[row]
-            if column == 3: # notes
+            if column == 3:  # notes
                 sg.event.annotations["notes"] = value
                 self.dataChanged.emit(index, index)
                 return True
 
             if column == 4:  # fibre class
                 sg.event.annotations["fibre_type"] = value
-                #sg.fibre_type = value
+                # sg.fibre_type = value
                 self.dataChanged.emit(index, index)
                 return True
         return False
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
-        if index.column() in  [3,4]:  # fibre class
+        if index.column() in [3, 4]:  # fibre class
             return Qt.ItemIsEditable | Qt.ItemIsEnabled
         return Qt.ItemIsEnabled
-    
+
 
 if __name__ == "__main__":
 
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     state.loadFile(r"/Users/xs19785/Documents/Open Ephys/06-dec.h5")
     # evt = neo.Event(np.array([100]) * pq.s)
     # evt.array_annotate(info=["something"], number=[5])
-    view = SpikeGroupTableView(None,state=state)
+    view = SpikeGroupTableView(None, state=state)
     # view = EventEdit(event=evt[0], annotations=evt.array_annotations_at_index(0))
     view.show()
     app.exec()

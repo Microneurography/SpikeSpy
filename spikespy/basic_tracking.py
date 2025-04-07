@@ -14,7 +14,6 @@ def track_basic(
     threshold=0.1 * pq.mV,
     window=0.01 * pq.s,
     max_skip=1,
-
 ):
     """
     basic tracking as per APTrack plugin
@@ -30,18 +29,21 @@ def track_basic(
     skipped = 0
 
     for x in stimulus_events[start_idx:]:
-        timeslice = raw_data.time_slice(x + offset - (window / 2), x + offset + (window / 2))
-        if threshold < 0 :
+        timeslice = raw_data.time_slice(
+            x + offset - (window / 2), x + offset + (window / 2)
+        )
+        if threshold < 0:
             timeslice = timeslice * -1
         max_idx = np.argmax(timeslice)
         max_val = timeslice[max_idx]
-        
 
         if (max_val >= threshold and threshold >= 0) or (
             max_val <= threshold and threshold < 0
         ):
             skipped = 0
-            max_ts = timeslice.times[max_idx]#((max_idx + t_start) / raw_data.sampling_rate) + raw_data.t_start
+            max_ts = timeslice.times[
+                max_idx
+            ]  # ((max_idx + t_start) / raw_data.sampling_rate) + raw_data.t_start
             traced_times.append(max_ts.rescale("s"))
             offset = max_ts - x
         else:
@@ -75,5 +77,6 @@ def test_track_basic():
         threshold=threshold,
     )
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     print(test_track_basic())

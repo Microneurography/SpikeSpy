@@ -51,7 +51,7 @@ def readHeader(f):
     except:
         header["date_created"] = datetime.strptime(
             header["date_created"], "'%d-%b-%Y %H%M%S'"
-        ) # odd in 22-Nov-22
+        )  # odd in 22-Nov-22
     return header
 
 
@@ -81,7 +81,6 @@ class APTrackRecording:
     is_adc: bool = True
 
 
-            
 def as_neo(
     mng_files: List[APTrackRecording],
     aptrack_events: str = None,
@@ -112,26 +111,28 @@ def as_neo(
             #     "oe_microVolts", pq.uV * float(header["bitVolts"])
             # )
         # header['']
-        #TODO: THIS BREAKS THINGS when record_no == 0 or None. as the recordings are dis-continuous the timestamps are off.
+        # TODO: THIS BREAKS THINGS when record_no == 0 or None. as the recordings are dis-continuous the timestamps are off.
         if record_no is not None and record_no >= 1 and False:  # DISABLED
             ch_mmap2 = ch_mmap[ch_mmap["recording"] == record_no - 1]
         else:
-            # 3 options: 
+            # 3 options:
             #   1. use an irregularly sampled
             #   2. fill in the gaps in the recording
             #   3. add each recording as a new channel/segment.
             ch_mmap2 = ch_mmap
-        
-        if len(np.unique(ch_mmap2['recording'])) >1:
+
+        if len(np.unique(ch_mmap2["recording"])) > 1:
             # 2.fill in the gaps
-            data = np.zeros(shape=(ch_mmap2['timestamp'][-1]+1024) - ch_mmap2['timestamp'][0], dtype = np.int16)
-            for x in ch_mmap2: # SLOOOOOW
-                ts = x['timestamp'] - ch_mmap2['timestamp'][0]
-                data[ts:ts+1024] =x['data']
+            data = np.zeros(
+                shape=(ch_mmap2["timestamp"][-1] + 1024) - ch_mmap2["timestamp"][0],
+                dtype=np.int16,
+            )
+            for x in ch_mmap2:  # SLOOOOOW
+                ts = x["timestamp"] - ch_mmap2["timestamp"][0]
+                data[ts : ts + 1024] = x["data"]
         else:
-            data = ch_mmap2['data'].flat        
-                
-        
+            data = ch_mmap2["data"].flat
+
         t_start = (ch_mmap2["timestamp"][0] / float(header["sampleRate"])) * pq.s
         if f.probe_type == TypeID.ANALOG:
             asig = AnalogSignal(
@@ -165,7 +166,7 @@ def as_neo(
             idxs = find_square_pulse_numpy(
                 data,
                 int(int(header["sampleRate"]) * 0.0004),
-                (2 * np.std(data- m)) + m,
+                (2 * np.std(data - m)) + m,
             )  # 2sd from mean
 
             idxs_rising = idxs[
@@ -222,9 +223,11 @@ def as_neo(
             stim_evt = next(x for x in seg.events if x.name == "env.stim")
             for i in range(len(spike_events)):
                 x = spike_events[i]
-                idx = np.searchsorted(stim_evt, x) -1
+                idx = np.searchsorted(stim_evt, x) - 1
                 if idx == -1:
-                    new_spike_events.append(x) #cant relocate events prior to inital stim
+                    new_spike_events.append(
+                        x
+                    )  # cant relocate events prior to inital stim
                     continue
                 spike_ts = stim_evt[idx]
                 new_spike_events.append(
@@ -444,10 +447,14 @@ def process_folder(
         signals, str(messages) if messages.exists() else None, record_no=record_no
     )
 
-    settings_info = Path(foldername) / ("settings"+ (f"_{record_no}" if record_no > 1 else "") + ".xml")
+    settings_info = Path(foldername) / (
+        "settings" + (f"_{record_no}" if record_no > 1 else "") + ".xml"
+    )
     if settings_info.exists():
         neo.annotate(settings_info=settings_info.read_text())
-    settings_info = Path(foldername) / ("Continuous_Data"+ (f"_{record_no}" if record_no > 1 else "") + ".openephys")
+    settings_info = Path(foldername) / (
+        "Continuous_Data" + (f"_{record_no}" if record_no > 1 else "") + ".openephys"
+    )
     if settings_info.exists():
         neo.annotate(Continuous_Data=settings_info.read_text())
 
@@ -456,8 +463,6 @@ def process_folder(
     )
 
     return neo
-
-
 
 
 # def process_folder2(foldername:str, chnum):
@@ -537,7 +542,7 @@ def find_square_pulse(arr, width, threshold):
 
     out_i = 0
     prev = 0
-    max_val = 0 
+    max_val = 0
     i = 0
     sum_val = np.sum(arr[0:width])
     for x in range(arr.shape[0]):
@@ -661,7 +666,9 @@ def process_oe_binary(folder):
         process_analog("ADC4", "env.stimVolt", "microneurography probe", bandpass=False)
     )
     seg.analogsignals.append(
-    process_analog("ADC2", "env.potentiometer", "microneurography probe", bandpass=False)
+        process_analog(
+            "ADC2", "env.potentiometer", "microneurography probe", bandpass=False
+        )
     )
     seg.analogsignals.append(
         process_analog(
@@ -703,7 +710,7 @@ def process_oe_binary(folder):
         units.append(e)
     seg.events += [stimChange_events, protocol_events]
 
-    seg.events += units   
+    seg.events += units
     return seg
 
 
