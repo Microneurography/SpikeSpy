@@ -81,9 +81,9 @@ class MultiTraceFixedView(QMatplotlib):
         return toolbar
     def unsetCons(self):
         for con in self.connections:
-            self.state.disconnect(connection=con)
+            self.state.disconnect(con)
         self.connections = []
-        
+
     def __del__(self):
         self.unsetCons()
         super().__del__()
@@ -99,6 +99,8 @@ class MultiTraceFixedView(QMatplotlib):
         return self.settings
     
     def on_click(self, event):
+        if self.matplotlib_toolbar.mode != "":
+            return False
         if self.state is not None:
             stimno = self.state.stimno
             start = max(stimno-self.settings.get('n_lines_pre',0),0)
