@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFormLayout,
     QDoubleSpinBox,
+    QToolBar,
 )
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer
@@ -44,6 +45,7 @@ mplstyle.use("fast")
 
 from matplotlib.axes import Axes
 from .helpers import qsignal_throttle_wrapper
+from .PolygonSelector import PolygonSelectorTool, LineSelector
 
 
 class falling_leaf_plotter:
@@ -193,7 +195,7 @@ class falling_leaf_plotter:
         ax.draw_artist(scat)
 
 
-class MultiTraceView(QMainWindow):
+class MultiTraceView(QMatplotlib):
     right_ax_data = {}
 
     def __init__(
@@ -201,10 +203,8 @@ class MultiTraceView(QMainWindow):
         parent: PySide6.QtWidgets.QWidget = None,
         state: ViewerState = None,
     ):
-
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.setFocusPolicy(Qt.ClickFocus)
+        
+        
         self.state: ViewerState = None
         self.ax_track_cmap = None
         self.ax_track_leaf = None
@@ -212,42 +212,59 @@ class MultiTraceView(QMainWindow):
         self.hline = None
         self.figcache = None
         self.references = []
+        self.ax = None
+        self.gs = None
 
         # throttle the update for upateAll to every 500ms when using the comboboxes.
         self.update_timer = QTimer()
         self.update_timer.setSingleShot(True)
         self.update_timer.timeout.connect(self.updateAll)
         self.update_timer.setInterval(500)
-        self.close_conn = self.destroyed.connect(lambda: self.closeEvent())
-
+        
+        super().__init__(parent,include_matplotlib_toolbar=True)
+        
+        
+        #self.close_conn = self.destroyed.connect(lambda: self.closeEvent())
         xsize = 1024
         ysize = 480
         dpi = 80
         self.plotter = falling_leaf_plotter()
-
-        self.fig = Figure(figsize=(xsize / dpi, ysize / dpi), dpi=dpi)
-        self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
-
         self.mode = "heatmap"
-
-        self.gs = self.fig.add_gridspec(1, 2, width_ratios=[3, 1])
-        self.ax = self.fig.add_subplot(self.gs[0, 0])
         self.ax_right = []
-        # self.ax_right_fig = self.fig.add_subfigure(self.gs[0,1])
-
-        # self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
-        # create widgets
-        self.view = FigureCanvas(self.fig)
-        # self.view.update()
-        # self.ps = PolygonSelectorTool(self.fig)
-        # self.ps.enable()
-        self.toolbar = NavigationToolbar2QT(self.view, self)
-        # act = self.toolbar.addAction("selector")
-
         self.lock_to_stim = False
+        self.referneces = []
+        self.rightPlots = {}
+        self.percentiles = []
 
-        self.addToolBar(self.toolbar)
-        layout = QVBoxLayout()
+        self.setup_figure()
+        self.pg_selector = LineSelector(
+            self.ax,
+            lambda *args: None,
+            props=dict(color="purple", linestyle="-", linewidth=2, alpha=0.5),
+            # useblit=True,
+        )  # useblit does not work (for unknown reasons)
+        self.pg_selector.set_active(False)
+        self.update_axis()
+        self.blit()
+
+        # @qsignal_throttle_wrapper(interval=33)
+        def draw_evt(evt):
+            self.blit()
+            self.draw_figure()
+
+        self.figure.canvas.mpl_connect("draw_event", draw_evt)
+
+        self.dialogPolySelect = DialogPolySelect(self)
+        self.dialogPolySelect.onSubmit.connect(self.polySelect)
+        self.dialogPolySelect.finished.connect(
+            lambda *args: self.toggle_polySelector(False)
+        )
+        if state is not None:
+            self.setState(state)
+        
+    
+    def create_toolbar(self):
+        toolbar = QToolBar("Settings")
         self.lowerSpinBox = QSpinBox(self)
         self.lowerSpinBox.setRange(0, 99)
         self.lowerSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
@@ -259,8 +276,6 @@ class MultiTraceView(QMainWindow):
         self.upperSpinBox.valueChanged.connect(self.lowerSpinBox.setMaximum)
         self.lowerSpinBox.setValue(45)
         self.upperSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
-
-        self.referneces = []
         self.lock_to_stimCheckBox = QCheckBox("lock")
 
         def set_lock(*args):
@@ -303,53 +318,17 @@ class MultiTraceView(QMainWindow):
         self.settingsButton = QPushButton("settings")
         self.settingsDialog = DialogSignalSelect()
         self.settingsButton.clicked.connect(lambda: self.settingsDialog.show())
-        self.rightPlots = {}
 
-        layout2 = QHBoxLayout()
-        layout2.addWidget(self.lowerSpinBox)
-        layout2.addWidget(self.upperSpinBox)
-        layout2.addWidget(self.includeAllUnitsCheckBox)
-        layout2.addWidget(self.lock_to_stimCheckBox)
-        layout2.addWidget(linesRadio)
-        layout2.addWidget(heatmapRadio)
-        layout2.addWidget(unitOnlyRadio)
-        layout2.addWidget(self.polySelectButton)
-        layout2.addWidget(self.settingsButton)
-
-        layout.addLayout(layout2)
-        layout.addWidget(self.view)
-
-        w = QWidget(self)
-        w.setLayout(layout)
-        self.setCentralWidget(w)
-
-        self.percentiles = []
-
-        if state is not None:
-            self.set_state(state)
-        self.setup_figure()
-        self.pg_selector = LineSelector(
-            self.ax,
-            lambda *args: None,
-            props=dict(color="purple", linestyle="-", linewidth=2, alpha=0.5),
-            # useblit=True,
-        )  # useblit does not work (for unknown reasons)
-        self.pg_selector.set_active(False)
-        self.update_axis()
-        self.blit()
-
-        # @qsignal_throttle_wrapper(interval=33)
-        def draw_evt(evt):
-            self.blit()
-            self.render()
-
-        self.fig.canvas.mpl_connect("draw_event", draw_evt)
-
-        self.dialogPolySelect = DialogPolySelect(self)
-        self.dialogPolySelect.onSubmit.connect(self.polySelect)
-        self.dialogPolySelect.finished.connect(
-            lambda *args: self.toggle_polySelector(False)
-        )
+        toolbar.addWidget(self.lowerSpinBox)
+        toolbar.addWidget(self.upperSpinBox)
+        toolbar.addWidget(self.includeAllUnitsCheckBox)
+        toolbar.addWidget(self.lock_to_stimCheckBox)
+        toolbar.addWidget(linesRadio)
+        toolbar.addWidget(heatmapRadio)
+        toolbar.addWidget(unitOnlyRadio)
+        toolbar.addWidget(self.polySelectButton)
+        toolbar.addWidget(self.settingsButton)
+        return toolbar
 
     def get_settings(self):
         return {
@@ -452,25 +431,29 @@ class MultiTraceView(QMainWindow):
             for ref in self.references:
                 self.state.disconnect(ref)
 
-    def set_state(self, state):
+    def setState(self, state):
         self.state = state
-
         self.remove_references()
+        super().setState(state)
 
         if self.state is None:
             return
 
-        self.references.append(
-            self.state.onLoadNewFile.connect(self.reset_right_axes_data)
-        )
+
         self.references.append(self.state.onLoadNewFile.connect(self.setup_figure))
         self.references.append(self.state.onLoadNewFile.connect(self.update_axis))
 
+        # self.references.append(
+        #     self.state.onUnitGroupChange.connect(lambda *args: self.render())
+        # )
+        # self.references.append(
+        #     self.state.onUnitChange.connect(lambda *args: self.render())
+        # )
+
+
+        self.references.append(self.state.onStimNoChange.connect(self.update_ylim))
         self.references.append(
-            self.state.onUnitGroupChange.connect(lambda *args: self.render())
-        )
-        self.references.append(
-            self.state.onUnitChange.connect(lambda *args: self.render())
+            self.state.onStimNoChange.connect(lambda *args: self.update_figure())
         )
         self.references.append(
             self.state.onUnitGroupChange.connect(
@@ -478,9 +461,8 @@ class MultiTraceView(QMainWindow):
             )
         )
 
-        self.references.append(self.state.onStimNoChange.connect(self.update_ylim))
         self.references.append(
-            self.state.onStimNoChange.connect(lambda *args: self.render())
+            self.state.onLoadNewFile.connect(self.reset_right_axes_data)
         )
         self.references.append(
             self.state.onUnitChange.connect(lambda x: self.reset_right_axes_data())
@@ -531,12 +513,19 @@ class MultiTraceView(QMainWindow):
         def updateView(k, v):
             self.rightPlots[k] = v
             self.plot_right_axis()
-            self.view.update()
+            # self.view.update()
 
         self.settingsDialog.changeSelection.connect(updateView)
         self.plot_right_axis()
 
     def setup_figure(self):
+        # if self.figure is not None:
+        #     self.figure.clear(True)
+        #if self.gs is None:
+        self.gs = self.figure.add_gridspec(1, 2, width_ratios=[3, 1])
+        #if self.ax is None:
+        self.ax = self.figure.add_subplot(self.gs[0, 0])
+
         mode = self.mode
         if self.state is None:
             return
@@ -547,7 +536,7 @@ class MultiTraceView(QMainWindow):
         erp = self.state.get_erp()
         erp = np.clip(erp, 0, np.max(erp))
         self.percentiles = np.percentile(erp, np.arange(100))
-        self.ax.clear()
+        #self.ax.clear()
         self.plotter.setup(
             self.ax, erp, sampling_rate=self.state.sampling_rate, mode=mode
         )
@@ -590,14 +579,14 @@ class MultiTraceView(QMainWindow):
         if self.points_spikegroup is not None:
             self.points_spikegroup.remove()
             self.points_spikegroup = None
-        self.view.update()
+        # self.view.update()
         self.blit()
         # self.plot_spikegroups()
         # self.plot_curstim_line(self.state.stimno)
-
+        
         self.plot_right_axis()
 
-        self.fig.tight_layout()
+        self.figure.tight_layout()
         return [x for x in [self.ax_track_cmap, self.ax_track_leaf] if x is not None]
         # self.view.draw_idle()
 
@@ -621,7 +610,7 @@ class MultiTraceView(QMainWindow):
             [(k, v) for k, v in self.right_ax_data.items() if self.rightPlots[k]]
         ):
 
-            self.ax_right.append(self.fig.add_subplot(gs00[0, i], sharey=self.ax))
+            self.ax_right.append(self.figure.add_subplot(gs00[0, i], sharey=self.ax))
             self.ax_right[i].set_yticks([])
             c = next(colorwheel)
             self.ax_right[i].plot(*data, label=label, color=c)
@@ -630,7 +619,7 @@ class MultiTraceView(QMainWindow):
             self.ax_right[i].tick_params(axis="y", colors=c)
         for ax in self.ax_right:
             try:
-                ax.draw(self.fig.canvas.get_renderer())
+                ax.draw(self.figure.canvas.get_renderer())
             except:
                 pass
         # self.view.draw_idle()  # TODO - this slows things down as it re-renders the image plot also.
@@ -642,7 +631,7 @@ class MultiTraceView(QMainWindow):
             self.ax.set_ylim(curStim + w, curStim - w)
             # self.view.update()
             # self.view.draw_idle()
-            self.view.draw()
+            # self.view.draw()
             # self.view.update()
 
     def update_axis(self):  # TODO: plot these data using x as the time in millis.
@@ -748,25 +737,25 @@ class MultiTraceView(QMainWindow):
         return self.points_spikegroups
 
     def blit(self):
-        # self.fig.canvas.draw()
-        self.blit_data = self.fig.canvas.copy_from_bbox(self.ax.bbox)
+        # self.figure.canvas.draw()
+        self.blit_data = self.figure.canvas.copy_from_bbox(self.ax.bbox)
 
     # @qsignal_throttle_wrapper(interval=33)
-    def render(self):
+    def draw_figure(self):
 
         # self.view.draw_idle()
 
-        self.fig.canvas.restore_region(self.blit_data)
+        self.figure.canvas.restore_region(self.blit_data)
         o = self.plot_curstim_line(self.state.stimno)
 
         o2 = self.plot_spikegroups()
 
-        self.view.update()
+        # self.view.update()
         return o + o2
         # try:
         #     self.ax.redraw_in_frame()
         # except:
-        #     self.fig.canvas.draw()
+        #     self.figure.canvas.draw()
         # self.view.update()
 
     def plot_curstim_line(self, stimNo=None):
@@ -783,14 +772,16 @@ class MultiTraceView(QMainWindow):
                 self.percentiles[self.upperSpinBox.value()],
             )
             # self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
-            self.view.draw_idle()
+            
+            # self.view.draw_idle()
+            self.update_figure()
 
-    def view_clicked(self, e: MouseEvent):
-        if self.toolbar.mode != "" or e.button != 1:
+    def on_click(self, e: MouseEvent):
+        if self.matplotlib_toolbar.mode != "" or e.button != 1:
             return
 
-        # if e.inaxes == self.ax:
-        self.state.setStimNo(round(e.ydata))
+        if e.inaxes == self.ax:
+            self.state.setStimNo(round(e.ydata))
 
     def __del__(self):
         self.remove_references()

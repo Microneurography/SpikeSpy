@@ -2,8 +2,11 @@ import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QToolBar
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Signal, Slot
+from PySide6.QtCore import Qt
+
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvas, NavigationToolbar2QT
+from matplotlib.ticker import FuncFormatter, MultipleLocator
 
 from spikespy.ViewerState import ViewerState
 
@@ -12,10 +15,10 @@ class QMatplotlib(QMainWindow):
     # Define a custom signal for updating the plot
     plot_update_signal = Signal(bool)
 
-    def __init__(self, state=None, parent=None, include_matplotlib_toolbar=False):
+    def __init__(self, state=None, parent=None, include_matplotlib_toolbar=False,**kwargs):
         super().__init__(parent)
         self.settings = {}
-
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         # Create a central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -24,7 +27,7 @@ class QMatplotlib(QMainWindow):
         layout = QVBoxLayout(central_widget)
 
         # Create a Matplotlib figure and canvas
-        self.figure = Figure(layout="tight")
+        self.figure = Figure(layout="tight", **kwargs)
         self.canvas = FigureCanvas(self.figure)
 
         # Add the canvas to the layout
@@ -58,7 +61,7 @@ class QMatplotlib(QMainWindow):
         self.state.onUnitChange.connect(self.onUnitChange)
         self.state.onUnitGroupChange.connect(self.onUnitGroupChange)
         self.state.onLoadNewFile.connect(self.onLoadNewFile)
-        self.plot_update_signal.emit(True)
+        #self.plot_update_signal.emit(True)
         if self.figure is not None:
 
             self.figure.clear()
