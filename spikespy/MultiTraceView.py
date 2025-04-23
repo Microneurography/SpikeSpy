@@ -46,6 +46,7 @@ import time
 from matplotlib.axes import Axes
 from .helpers import qsignal_throttle_wrapper
 from matplotlib.image import AxesImage
+from .CachedAxesImage import CachedAxesImage
 
 class falling_leaf_plotter:
     def __init__(self):
@@ -206,64 +207,7 @@ class falling_leaf_plotter:
         #ax.draw_artist(scat)
         return [scat]
 
-import matplotlib.transforms as mtransforms
-from matplotlib.transforms import TransformedBbox, Bbox
-class CachedAxesImage(AxesImage):
-    """
-    A subclass of AxesImage that caches the rendered image and updates
-    only when the x or y limits of the axes or the figure size changes.
-    """
 
-    def __init__(self, ax, **kwargs):
-        super().__init__(ax, **kwargs)
-        self._cached_image = None
-        self._cached_extent = None
-        self._cached_figure_size = None
-        self._cached_lims = None
-        self._cached_clim = None
-
-    def make_image(self, renderer, magnification=1.0, unsampled=False):
-        # docstring inherited
-        trans = self.get_transform()
-        # image is created in the canvas coordinate.
-        x1, x2, y1, y2 = self.get_extent()
-        bbox = Bbox(np.array([[x1, y1], [x2, y2]]))
-        transformed_bbox = TransformedBbox(bbox, trans)
-        clip = ((self.get_clip_box() or self.axes.bbox) if self.get_clip_on()
-                else self.get_figure(root=True).bbox)
-        return self._make_image(self._A, bbox, transformed_bbox, clip,
-                                magnification, unsampled=unsampled)
-    
-    def make_image(self, renderer, magnification=1.0, unsampled=False):
-        current_extent = self.get_extent()
-        current_figure_size = self.axes.figure.get_size_inches()
-        # Get the current xlim and ylim
-        current_xlim = self.axes.get_xlim()
-        current_ylim = self.axes.get_ylim()
-        # Get the current clim
-        current_clim = self.get_clim()
-
-        # Check if the cached image is valid
-        if (
-            self._cached_image is not None
-            and self._cached_extent == current_extent
-            and self._cached_figure_size == tuple(current_figure_size)
-            and self._cached_magnification == magnification
-            and self._cached_lims == (current_xlim, current_ylim)
-            and self._cached_clim == current_clim
-            and not self.stale
-        ):
-            return self._cached_image
-
-        # Cache the new image
-        self._cached_image = super().make_image(renderer, magnification, unsampled)
-        self._cached_extent = current_extent
-        self._cached_figure_size = tuple(current_figure_size)
-        self._cached_magnification = magnification
-        self._cached_lims = (current_xlim, current_ylim)
-        self._cached_clim = current_clim
-
-        return self._cached_image
 
 class MultiTraceView(QMainWindow):
     right_ax_data = {}
@@ -368,6 +312,7 @@ class MultiTraceView(QMainWindow):
             if checked:
                 self.mode = mode
                 self.setup_figure()
+            self.view.draw()
 
         butgrp.idToggled.connect(buttonToggled)
 
@@ -495,6 +440,9 @@ class MultiTraceView(QMainWindow):
     def toggle_polySelector(self, mode=None):
         self.pg_selector.set_active(mode or (not self.pg_selector.active))
         if self.pg_selector.active == 1:
+            self.pg_selector.ax = self.ax
+            if self.pg_selector._selection_artist not in self.ax.lines:
+                self.ax.add_line(self.pg_selector._selection_artist)
             self.pg_selector.connect_default_events()
             self.pg_selector._selection_completed = False
             self.pg_selector.set_visible(True)
@@ -626,7 +574,20 @@ class MultiTraceView(QMainWindow):
         self.percentiles = np.percentile(erp, np.arange(100))
         ylim = self.ax.get_ylim()
         xlim = self.ax.get_xlim()
-        self.ax.clear()
+        if self.plotter is not None:
+            try:
+                self.plotter.ax_track_cmap.remove()
+            except:
+                pass
+            try:
+                self.plotter.ax_track_leaf.remove()
+            except:
+                pass
+            try:
+                self.plotter.hline.remove()
+            except:
+                pass
+            
         self.plotter.setup(
             self.ax, erp, sampling_rate=self.state.sampling_rate, mode=mode
         )
@@ -777,7 +738,7 @@ class MultiTraceView(QMainWindow):
             if len(points) == 0:
                 # self.view.draw_idle()
                 return
-            scat = self.ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
+            scat = self.ax.scatter(points[:, 0], points[:, 1], s=10, **kwargs)
             #scat.set_animated(True)
             #self.ax.draw_artist(scat)
             return scat
@@ -809,7 +770,10 @@ class MultiTraceView(QMainWindow):
         
         if self.pg_selector.active:
             self.pg_selector.set_visible(True)
-            self.pg_selector._draw_polygon()
+  
+
+
+            #self.pg_selector._draw_polygon()
             
             #self.pg_selector.draw()
 
@@ -853,14 +817,6 @@ class MultiTraceView(QMainWindow):
 class LineSelector(PolygonSelector):
     # self.outerlines = None
     # def calculate_hits
-
-
-
-    def _draw_polygon(self):
-        # if self.outerlines is None:
-        # self.outerlines = Line2D
-
-        super()._draw_polygon()
 
     def _release(self, event):
         """Button release event handler."""
