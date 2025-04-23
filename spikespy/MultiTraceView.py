@@ -3,6 +3,7 @@ import sys
 from dataclasses import dataclass, field
 
 import matplotlib
+import matplotlib.axes
 import matplotlib.style as mplstyle
 import numpy as np
 import PySide6
@@ -40,11 +41,11 @@ from .QMatplotlib import QMatplotlib
 from matplotlib.lines import Line2D
 import time
 
-mplstyle.use("fast")
+#mplstyle.use("fast")
 
 from matplotlib.axes import Axes
 from .helpers import qsignal_throttle_wrapper
-
+from matplotlib.image import AxesImage
 
 class falling_leaf_plotter:
     def __init__(self):
@@ -55,7 +56,7 @@ class falling_leaf_plotter:
         self.cb2 = None
         self.mode = None
         self.partial = False
-
+        self.hline = None
     def setup(self, ax: Axes, erp, sampling_rate=1000, mode="heatmap"):
         self.percentiles = np.percentile(erp, np.arange(100))
         self.mode = mode
@@ -101,17 +102,21 @@ class falling_leaf_plotter:
             #    self.ax_track_cmap.remove()
             ax.set_autoscale_on(False)
 
-            self.ax_track_cmap = ax.imshow(
-                np.clip(im_data, 0, np.max(im_data)),
-                aspect="auto",
+            self.ax_track_cmap = CachedAxesImage(
+                ax,
                 cmap="gray_r",
-                clim=(self.percentiles[40], self.percentiles[95]),
-                extent=(xlim[0], xlim[1], ylim[1], ylim[0]),
-                interpolation="antialiased",  # slows down render (i suspect)
+                interpolation="antialiased",
+
             )
-            self.ax_track_cmap.set_animated(True)
-            ax.draw_artist(self.ax_track_cmap)
-            self.ax_track_cmap.set_visible(True)
+            self.ax_track_cmap.set_data(
+                np.clip(im_data, 0, np.max(im_data))
+            )
+            self.ax_track_cmap.set_extent((xlim[0], xlim[1], ylim[1], ylim[0]))
+            self.ax_track_cmap.set_clim(self.percentiles[40], self.percentiles[95])
+            ax.add_artist(self.ax_track_cmap)
+            # self.ax_track_cmap.set_animated(True)
+            # ax.draw_artist(self.ax_track_cmap)
+            # self.ax_track_cmap.set_visible(False)
         elif mode == "lines":
             if self.ax_track_cmap is not None:
                 self.ax_track_cmap.set_visible(False)
@@ -151,6 +156,7 @@ class falling_leaf_plotter:
             #     zorder=10,
             # )
 
+
     def highlight_stim(self, ax, stimNo, partial=True):
         if stimNo is None:
             return
@@ -165,6 +171,7 @@ class falling_leaf_plotter:
                 for x in range(len(ax_leaf_paths))
             ]
             self.ax_track_leaf.set_colors(new_colors)
+            #ax.draw_artist(self.ax_track_leaf)
             return self.ax_track_leaf
 
             # op: lines.Line2D = self.mainPlotter.ax_track_leaf[stimNo]
@@ -175,10 +182,16 @@ class falling_leaf_plotter:
             # self.hline.update_from(op)
             # self.hline.set_color("purple")
         else:
+            #self.hline.set_visible(True)
+            if self.hline is not None:
+                try:
+                    self.hline.remove()
+                except:
+                    pass
             self.hline = ax.axhline(stimNo)
-            self.hline.set_animated(True)
+            #self.hline.set_animated(True)
 
-            ax.draw_artist(self.hline)
+            #ax.draw_artist(self.hline)
             return self.hline
 
     def plot_spikegroup(self, ax, sg, **kwargs):
@@ -190,8 +203,67 @@ class falling_leaf_plotter:
             return
         scat = ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
         # scat.set_animated(True)
-        ax.draw_artist(scat)
+        #ax.draw_artist(scat)
+        return [scat]
 
+import matplotlib.transforms as mtransforms
+from matplotlib.transforms import TransformedBbox, Bbox
+class CachedAxesImage(AxesImage):
+    """
+    A subclass of AxesImage that caches the rendered image and updates
+    only when the x or y limits of the axes or the figure size changes.
+    """
+
+    def __init__(self, ax, **kwargs):
+        super().__init__(ax, **kwargs)
+        self._cached_image = None
+        self._cached_extent = None
+        self._cached_figure_size = None
+        self._cached_lims = None
+        self._cached_clim = None
+
+    def make_image(self, renderer, magnification=1.0, unsampled=False):
+        # docstring inherited
+        trans = self.get_transform()
+        # image is created in the canvas coordinate.
+        x1, x2, y1, y2 = self.get_extent()
+        bbox = Bbox(np.array([[x1, y1], [x2, y2]]))
+        transformed_bbox = TransformedBbox(bbox, trans)
+        clip = ((self.get_clip_box() or self.axes.bbox) if self.get_clip_on()
+                else self.get_figure(root=True).bbox)
+        return self._make_image(self._A, bbox, transformed_bbox, clip,
+                                magnification, unsampled=unsampled)
+    
+    def make_image(self, renderer, magnification=1.0, unsampled=False):
+        current_extent = self.get_extent()
+        current_figure_size = self.axes.figure.get_size_inches()
+        # Get the current xlim and ylim
+        current_xlim = self.axes.get_xlim()
+        current_ylim = self.axes.get_ylim()
+        # Get the current clim
+        current_clim = self.get_clim()
+
+        # Check if the cached image is valid
+        if (
+            self._cached_image is not None
+            and self._cached_extent == current_extent
+            and self._cached_figure_size == tuple(current_figure_size)
+            and self._cached_magnification == magnification
+            and self._cached_lims == (current_xlim, current_ylim)
+            and self._cached_clim == current_clim
+            and not self.stale
+        ):
+            return self._cached_image
+
+        # Cache the new image
+        self._cached_image = super().make_image(renderer, magnification, unsampled)
+        self._cached_extent = current_extent
+        self._cached_figure_size = tuple(current_figure_size)
+        self._cached_magnification = magnification
+        self._cached_lims = (current_xlim, current_ylim)
+        self._cached_clim = current_clim
+
+        return self._cached_image
 
 class MultiTraceView(QMainWindow):
     right_ax_data = {}
@@ -231,6 +303,8 @@ class MultiTraceView(QMainWindow):
         self.mode = "heatmap"
 
         self.gs = self.fig.add_gridspec(1, 2, width_ratios=[3, 1])
+
+        
         self.ax = self.fig.add_subplot(self.gs[0, 0])
         self.ax_right = []
         # self.ax_right_fig = self.fig.add_subfigure(self.gs[0,1])
@@ -336,14 +410,17 @@ class MultiTraceView(QMainWindow):
         )  # useblit does not work (for unknown reasons)
         self.pg_selector.set_active(False)
         self.update_axis()
-        self.blit()
+        
 
         # @qsignal_throttle_wrapper(interval=33)
         def draw_evt(evt):
-            self.blit()
-            self.render()
-
-        self.fig.canvas.mpl_connect("draw_event", draw_evt)
+            with self.fig.canvas.callbacks.blocked():
+                # self.blit()
+                self.render()
+        
+        #self.fig.canvas.mpl_connect("draw_event", draw_evt)
+        # self.ax.callbacks.connect("xlim_changed", draw_evt)
+        # self.ax.callbacks.connect("ylim_changed", draw_evt)
 
         self.dialogPolySelect = DialogPolySelect(self)
         self.dialogPolySelect.onSubmit.connect(self.polySelect)
@@ -490,7 +567,7 @@ class MultiTraceView(QMainWindow):
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
 
-    @qsignal_throttle_wrapper(1000)
+    #@qsignal_throttle_wrapper(1000)
     def reset_right_axes_data(self):
         if self.state is None:
             return
@@ -531,11 +608,11 @@ class MultiTraceView(QMainWindow):
         def updateView(k, v):
             self.rightPlots[k] = v
             self.plot_right_axis()
-            self.view.update()
+            self.render()
 
         self.settingsDialog.changeSelection.connect(updateView)
         self.plot_right_axis()
-
+        self.view.draw_idle()
     def setup_figure(self):
         mode = self.mode
         if self.state is None:
@@ -547,52 +624,24 @@ class MultiTraceView(QMainWindow):
         erp = self.state.get_erp()
         erp = np.clip(erp, 0, np.max(erp))
         self.percentiles = np.percentile(erp, np.arange(100))
+        ylim = self.ax.get_ylim()
+        xlim = self.ax.get_xlim()
         self.ax.clear()
         self.plotter.setup(
             self.ax, erp, sampling_rate=self.state.sampling_rate, mode=mode
         )
         self.plotter.plot_main(mode=self.mode, ax=self.ax, erp=erp, partial=False)
-        # if self.ax_track_leaf is not None:
-        #     [x.remove() for x in self.ax_track_leaf]
-        #     self.ax_track_leaf = None
-        # if self.ax_track_cmap is not None:
-        #     self.ax_track_cmap.remove()
-        #     self.ax_track_cmap = None
+        self.ax.set_ylim(ylim)
+        self.ax.set_xlim(xlim)
+        self.ax.set_autoscale_on(False)
 
-        # if mode == "heatmap":
-        #     self.ax_track_cmap = self.ax.imshow(
-        #         erp,
-        #         aspect="auto",
-        #         cmap="gray_r",
-        #         clim=(
-        #             self.percentiles[self.lowerSpinBox.value()],
-        #             self.percentiles[self.upperSpinBox.value()],
-        #         ),
-        #         interpolation="antialiased",  # slows down render (i suspect)
-        #     )
-
-        # elif mode == "lines":
-
-        #     p90 = self.percentiles[95] * 4
-        #     analog_signal_erp_norm = np.clip(self.state.get_erp(), -p90, p90) / (
-        #         p90 * 2
-        #     )
-        #     self.ax_track_leaf = self.ax.plot(  # could increase performance to just plot lines in view. but then no blitting...
-        #         (
-        #             (analog_signal_erp_norm * -1)
-        #             + np.arange(analog_signal_erp_norm.shape[0])[:, np.newaxis]
-        #         ).T,
-        #         color="gray",
-        #         zorder=10,
-        #     )
-        # else:
-        #     pass
-        if self.points_spikegroup is not None:
-            self.points_spikegroup.remove()
-            self.points_spikegroup = None
         self.view.update()
-        self.blit()
-        # self.plot_spikegroups()
+        #self.blit()
+
+        self.plotter.highlight_stim(self.ax,self.state.stimno)
+
+        
+        self.plot_spikegroups()
         # self.plot_curstim_line(self.state.stimno)
 
         self.plot_right_axis()
@@ -601,7 +650,7 @@ class MultiTraceView(QMainWindow):
         return [x for x in [self.ax_track_cmap, self.ax_track_leaf] if x is not None]
         # self.view.draw_idle()
 
-    @qsignal_throttle_wrapper(1000)
+    #@qsignal_throttle_wrapper(1000)
     def plot_right_axis(self):
         for ax in self.ax_right:
             ax.remove()
@@ -622,7 +671,8 @@ class MultiTraceView(QMainWindow):
         ):
 
             self.ax_right.append(self.fig.add_subplot(gs00[0, i], sharey=self.ax))
-            self.ax_right[i].set_yticks([])
+            if i>0:
+                self.ax_right[i].tick_params(axis="y", labelleft=False)
             c = next(colorwheel)
             self.ax_right[i].plot(*data, label=label, color=c)
             self.ax_right[i].set_xlabel(label)
@@ -728,8 +778,8 @@ class MultiTraceView(QMainWindow):
                 # self.view.draw_idle()
                 return
             scat = self.ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
-            scat.set_animated(True)
-            self.ax.draw_artist(scat)
+            #scat.set_animated(True)
+            #self.ax.draw_artist(scat)
             return scat
 
         # include other units
@@ -747,19 +797,21 @@ class MultiTraceView(QMainWindow):
         self.points_spikegroups.append(artists)
         return self.points_spikegroups
 
-    def blit(self):
-        # self.fig.canvas.draw()
-        self.blit_data = self.fig.canvas.copy_from_bbox(self.ax.bbox)
-
     # @qsignal_throttle_wrapper(interval=33)
     def render(self):
 
-        # self.view.draw_idle()
-
-        self.fig.canvas.restore_region(self.blit_data)
+        self.view.draw_idle()
+    
+        #self.fig.canvas.restore_region(self.blit_data)
         o = self.plot_curstim_line(self.state.stimno)
 
         o2 = self.plot_spikegroups()
+        
+        if self.pg_selector.active:
+            self.pg_selector.set_visible(True)
+            self.pg_selector._draw_polygon()
+            
+            #self.pg_selector.draw()
 
         self.view.update()
         return o + o2
@@ -801,6 +853,9 @@ class MultiTraceView(QMainWindow):
 class LineSelector(PolygonSelector):
     # self.outerlines = None
     # def calculate_hits
+
+
+
     def _draw_polygon(self):
         # if self.outerlines is None:
         # self.outerlines = Line2D
