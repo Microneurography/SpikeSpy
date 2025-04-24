@@ -530,7 +530,7 @@ class MultiTraceView(QMainWindow):
 
         self.references.append(self.state.onStimNoChange.connect(self.update_ylim))
         self.references.append(
-            self.state.onStimNoChange.connect(lambda *args: self.render())
+            self.state.onStimNoChange.connect(lambda *args: self.plot_curstim_line(self.state.stimno))
         )
         self.references.append(
             self.state.onUnitChange.connect(lambda x: self.reset_right_axes_data())
@@ -797,7 +797,7 @@ class MultiTraceView(QMainWindow):
         self.view.draw_idle()
     
         #self.fig.canvas.restore_region(self.blit_data)
-        o = self.plot_curstim_line(self.state.stimno)
+        #o = self.plot_curstim_line(self.state.stimno)
 
        
         o2 = self.plot_spikegroups()
@@ -820,7 +820,8 @@ class MultiTraceView(QMainWindow):
         # self.view.update()
 
     def plot_curstim_line(self, stimNo=None):
-        return [self.plotter.highlight_stim(self.ax, stimNo, partial=False)]
+        self.plotter.highlight_stim(self.ax, stimNo, partial=False)
+        self.view.draw_idle()
 
     @Slot()
     def updateAll(self):
