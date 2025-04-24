@@ -31,6 +31,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFormLayout,
     QDoubleSpinBox,
+    QToolBar,
+    QLabel,
+    QSpacerItem,
+    QSizePolicy
 )
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer
@@ -59,7 +63,7 @@ class falling_leaf_plotter:
         self.partial = False
         self.hline = None
     def setup(self, ax: Axes, erp, sampling_rate=1000, mode="heatmap"):
-        self.percentiles = np.percentile(erp, np.arange(100))
+        self.percentiles = np.arange(0,100)*2*np.sqrt(np.mean(erp**2))#np.percentile(erp, np.arange(100))
         self.mode = mode
 
         # self.cb2 = ax.callbacks.connect("ylim_changed", self.setup)
@@ -73,7 +77,7 @@ class falling_leaf_plotter:
         )  # this locator puts ticks at regular intervals
         ax.xaxis.set_major_locator(loc)
 
-    def plot_main(self, mode, ax: Axes, erp, partial=True):
+    def plot_main(self, mode, ax: Axes, erp, partial=True,clim=None):
         self.mode = mode
 
         ylim = ax.get_ylim()
@@ -86,6 +90,7 @@ class falling_leaf_plotter:
             im_data = erp
             xlim = [0, erp.shape[1]]
             ylim = [0, erp.shape[0]]
+        im_data=im_data
         if mode == "heatmap":
             if self.ax_track_leaf is not None:
                 try:
@@ -107,13 +112,18 @@ class falling_leaf_plotter:
                 ax,
                 cmap="gray_r",
                 interpolation="antialiased",
+                rolling_max=True,
 
             )
+            
             self.ax_track_cmap.set_data(
                 np.clip(im_data, 0, np.max(im_data))
             )
             self.ax_track_cmap.set_extent((xlim[0], xlim[1], ylim[1], ylim[0]))
-            self.ax_track_cmap.set_clim(self.percentiles[40], self.percentiles[95])
+            if clim is None:
+                clim = (self.percentiles[40], self.percentiles[95])
+            self.ax_track_cmap.set_clim(*clim)
+            self.ax_track_cmap._scale_norm(None,None,None)
             ax.add_artist(self.ax_track_cmap)
             # self.ax_track_cmap.set_animated(True)
             # ax.draw_artist(self.ax_track_cmap)
@@ -122,7 +132,7 @@ class falling_leaf_plotter:
             if self.ax_track_cmap is not None:
                 self.ax_track_cmap.set_visible(False)
 
-            p90 = self.percentiles[95] * 4
+            p90 = np.std(self.im_data)*10 #self.percentiles[95] * 4
             analog_signal_erp_norm = np.clip(
                 im_data,
                 -p90,
@@ -196,6 +206,7 @@ class falling_leaf_plotter:
             return self.hline
 
     def plot_spikegroup(self, ax, sg, **kwargs):
+        kwargs = {"alpha":0.5, **kwargs}
 
         points = np.array(
             [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
@@ -271,11 +282,11 @@ class MultiTraceView(QMainWindow):
         self.lowerSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
 
         self.upperSpinBox = QSpinBox(self)
-        self.upperSpinBox.setRange(0, 99)
-        self.upperSpinBox.setValue(95)
+        self.upperSpinBox.setRange(0, 100)
+        self.upperSpinBox.setValue(10)
         self.lowerSpinBox.valueChanged.connect(self.upperSpinBox.setMinimum)
         self.upperSpinBox.valueChanged.connect(self.lowerSpinBox.setMaximum)
-        self.lowerSpinBox.setValue(45)
+        self.lowerSpinBox.setValue(1)
         self.upperSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
 
         self.referneces = []
@@ -287,7 +298,10 @@ class MultiTraceView(QMainWindow):
 
         self.lock_to_stimCheckBox.stateChanged.connect(set_lock)
 
-        self.includeAllUnitsCheckBox = QCheckBox("All units")
+        self.includeUnitCheckbox = QCheckBox("Tracked")
+        self.includeUnitCheckbox.setChecked(True)
+        self.includeUnitCheckbox.stateChanged.connect(lambda x: self.render())
+        self.includeAllUnitsCheckBox = QCheckBox("Others")
         self.includeAllUnitsCheckBox.stateChanged.connect(lambda x: self.render())
 
         butgrp = QButtonGroup()
@@ -323,21 +337,32 @@ class MultiTraceView(QMainWindow):
         self.settingsDialog = DialogSignalSelect()
         self.settingsButton.clicked.connect(lambda: self.settingsDialog.show())
         self.rightPlots = {}
-
-        layout2 = QHBoxLayout()
-        layout2.addWidget(self.lowerSpinBox)
-        layout2.addWidget(self.upperSpinBox)
-        layout2.addWidget(self.includeAllUnitsCheckBox)
-        layout2.addWidget(self.lock_to_stimCheckBox)
-        layout2.addWidget(linesRadio)
-        layout2.addWidget(heatmapRadio)
-        layout2.addWidget(unitOnlyRadio)
-        layout2.addWidget(self.polySelectButton)
-        layout2.addWidget(self.settingsButton)
-
-        layout.addLayout(layout2)
+        toolbar2 = QToolBar("Controls", self)
+        toolbar2.addWidget(QLabel("Colour scale (std): "))
+        toolbar2.addWidget(QLabel("Min"))
+        toolbar2.addWidget(self.lowerSpinBox)
+        toolbar2.addWidget(QLabel("Max"))
+        toolbar2.addWidget(self.upperSpinBox)
+        toolbar2.addSeparator()
+        toolbar2.addWidget(QLabel("Units:"))
+        toolbar2.addWidget(self.includeUnitCheckbox)
+        toolbar2.addWidget(self.includeAllUnitsCheckBox)
+        toolbar2.addSeparator()
+        toolbar2.addWidget(QLabel("Mode:"))
+        toolbar2.addWidget(self.lock_to_stimCheckBox)
+        toolbar2.addWidget(linesRadio)
+        toolbar2.addWidget(heatmapRadio)
+        toolbar2.addWidget(unitOnlyRadio)
+        toolbar2.addSeparator()
+        
+        
+        toolbar2.addWidget(self.polySelectButton)
+        toolbar2.addWidget(self.settingsButton)
+        
+        self.addToolBarBreak()
+        self.addToolBar(Qt.TopToolBarArea, toolbar2)
+        #layout.addLayout(layout2)
         layout.addWidget(self.view)
-
         w = QWidget(self)
         w.setLayout(layout)
         self.setCentralWidget(w)
@@ -570,8 +595,9 @@ class MultiTraceView(QMainWindow):
 
         # self.ax_right_fig.clear()
         erp = self.state.get_erp()
-        erp = np.clip(erp, 0, np.max(erp))
-        self.percentiles = np.percentile(erp, np.arange(100))
+        #erp = np.clip(erp, 0, np.max(erp))
+        self.std = np.std(erp)
+        #self.percentiles = self.percentiles = np.linspace(0,10,101)*np.std((erp - np.mean(erp)))#np.percentile(erp, np.arange(100))#np.percentile(erp[erp>0], np.arange(101))
         ylim = self.ax.get_ylim()
         xlim = self.ax.get_xlim()
         if self.plotter is not None:
@@ -591,7 +617,7 @@ class MultiTraceView(QMainWindow):
         self.plotter.setup(
             self.ax, erp, sampling_rate=self.state.sampling_rate, mode=mode
         )
-        self.plotter.plot_main(mode=self.mode, ax=self.ax, erp=erp, partial=False)
+        self.plotter.plot_main(mode=self.mode, ax=self.ax, erp=erp, partial=False,clim=(self.std*self.lowerSpinBox.value(), self.std*self.upperSpinBox.value()))
         self.ax.set_ylim(ylim)
         self.ax.set_xlim(xlim)
         self.ax.set_autoscale_on(False)
@@ -738,10 +764,16 @@ class MultiTraceView(QMainWindow):
             if len(points) == 0:
                 # self.view.draw_idle()
                 return
-            scat = self.ax.scatter(points[:, 0], points[:, 1], s=10, **kwargs)
+            #scat = self.ax.scatter(points[:, 0], points[:, 1], s=10, **kwargs)
+            for point in points:
+                rect = matplotlib.patches.Rectangle(
+                    (point[0] - 5, point[1] ), 10, 1, **kwargs
+                )
+                self.ax.add_patch(rect)
+                self.points_spikegroups.append(rect)
             #scat.set_animated(True)
             #self.ax.draw_artist(scat)
-            return scat
+            return None
 
         # include other units
         from matplotlib.cm import get_cmap
@@ -754,8 +786,9 @@ class MultiTraceView(QMainWindow):
                 artists = plot(i, color=colors[i % len(colors)])
                 self.points_spikegroups.append(artists)
         # bg = self.
-        artists = plot(self.state.cur_spike_group, color="red")
-        self.points_spikegroups.append(artists)
+        if self.includeUnitCheckbox.isChecked():
+            artists = plot(self.state.cur_spike_group, color="red", alpha=0.6 if self.mode=="heatmap" else 1)
+            self.points_spikegroups.append(artists)
         return self.points_spikegroups
 
     # @qsignal_throttle_wrapper(interval=33)
@@ -766,6 +799,7 @@ class MultiTraceView(QMainWindow):
         #self.fig.canvas.restore_region(self.blit_data)
         o = self.plot_curstim_line(self.state.stimno)
 
+       
         o2 = self.plot_spikegroups()
         
         if self.pg_selector.active:
@@ -793,10 +827,11 @@ class MultiTraceView(QMainWindow):
         if self.mode != "heatmap" or self.plotter.ax_track_cmap is None:
             pass
         else:
-
+            vmin = self.std * self.lowerSpinBox.value() #self.percentiles[self.lowerSpinBox.value()]
+            vmax = self.std*self.upperSpinBox.value() #self.percentiles[self.upperSpinBox.value()]
             self.plotter.ax_track_cmap.set_clim(
-                self.percentiles[self.lowerSpinBox.value()],
-                self.percentiles[self.upperSpinBox.value()],
+                vmin,
+                max(vmin+0.001, vmax),
             )
             # self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
             self.view.draw_idle()

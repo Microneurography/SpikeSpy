@@ -2,13 +2,14 @@ import matplotlib.transforms as mtransforms
 from matplotlib.transforms import TransformedBbox, Bbox
 from matplotlib.image import AxesImage
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 class CachedAxesImage(AxesImage):
     """
     A subclass of AxesImage that caches the rendered image and updates
     only when the x or y limits of the axes or the figure size changes.
     """
 
-    def __init__(self, ax, **kwargs):
+    def __init__(self, ax, rolling_max=False,  **kwargs):
         super().__init__(ax, **kwargs)
         self._cached_image = None
         self._cached_extent = None
@@ -17,6 +18,7 @@ class CachedAxesImage(AxesImage):
         self._cached_clim = None
         self._cached_clip = None
         self._cached_transform = None
+        self.rolling_max= rolling_max
 
 
     
@@ -69,8 +71,30 @@ class CachedAxesImage(AxesImage):
         # Cache the new larger cut of the data
         fig = self.get_figure(root=True)
         fac = renderer.dpi/fig.dpi
+        # hack for ax if there are too many points is too big do a rolling max interpolation on X axis
+        A = self._A.copy()
+        if self.rolling_max:
+            x_scale = (bbox.width/transformed_bbox.width)/2
+            if x_scale > 1:
+                
+
+                # rolling window on X axis of x_scale points
+                
+                pad_width = int(x_scale) - 1
+                A = np.pad(A, ((0, 0), (0, pad_width)), mode='edge')
+                A = sliding_window_view(A, int(x_scale), axis=1)
+                A = np.nanmax(A, axis=2)
+
+            y_scale = (bbox.height/transformed_bbox.height)/2
+            if y_scale > 1:
+                # rolling window on Y axis of y_scale points
+                pad_width = int(y_scale) - 1
+                A = np.pad(A, ((0, pad_width), (0, 0)), mode='edge')
+                A = sliding_window_view(A, int(y_scale), axis=0)
+                A = np.nanmax(A, axis=2)
+
         self._cached_image = self._make_image(
-            self._A, bbox, transformed_bbox, clip2,
+            A, bbox, transformed_bbox, clip2,
              magnification=magnification / fac, unsampled=unsampled
         )
         
