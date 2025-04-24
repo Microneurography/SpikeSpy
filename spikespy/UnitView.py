@@ -101,9 +101,23 @@ class UnitView(QMatplotlib):
         for i, idx, d in zip(range(len(sig_erp)), idx_arr, sig_erp):
             if idx is None:
                 continue
-            ydata = d[max(idx[0] - self.w, 0) : min(idx[0] + self.w, len(d))]
-            mean_arr += ydata
-            self.lines[i] = np.vstack((np.arange(-self.w, self.w), ydata)).T
+            w = [-self.w, self.w]
+            xmin = idx[0] - self.w
+            if xmin <0:
+                w[0] = abs(xmin)+1
+                xmin = 0
+
+            xmax = idx[0] + self.w
+            if xmax > len(d):
+                w[1] = abs(xmax - len(d))
+                xmax = len(d)
+
+            ydata = d[ xmin:xmax]
+            try:
+                mean_arr[w[0]+self.w:w[1]+self.w] += ydata
+                self.lines[i] = np.vstack((np.arange(w[0],w[1]), ydata)).T
+            except:
+                pass
             ylims[0] = min(ylims[0], np.min(ydata))
             ylims[1] = max(ylims[1], np.max(ydata))
 
