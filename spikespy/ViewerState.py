@@ -291,7 +291,8 @@ class ViewerState(QObject):
                         newEvents.append(x)
                         break
 
-            event = Event(np.array(newEvents) * pq.s)
+            event = Event(np.array(newEvents) * pq.s,**old_evt.annotations, name=old_evt.name)
+            #TODO: this does not maintain array_annotations.
         self.spike_groups[self.cur_spike_group].event = event
         del self.spike_groups[self.cur_spike_group].idx_arr
         self.update_idx_arrs()
