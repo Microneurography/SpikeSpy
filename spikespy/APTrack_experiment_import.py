@@ -14,6 +14,7 @@ import numpy as np
 import quantities as pq
 from neo.core import AnalogSignal, Block, Event, Group, Segment
 from scipy import signal
+from datetime import datetime
 
 
 def apply_bandpass(data: AnalogSignal, lowHz=500, highHz=7000, sampleRate=None):
@@ -41,7 +42,16 @@ def readHeader(f):
     h = f.read(1024).decode().replace("\n", "").replace("header.", "")
     for i, item in enumerate(h.split(";")):
         if "=" in item:
-            header[item.split(" = ")[0]] = item.split(" = ")[1]
+            header[item.split(" = ")[0].strip()] = item.split(" = ")[1]
+
+    try:
+        header["date_created"] = datetime.strptime(
+            header["date_created"], "'%d-%b-%Y %H:%M:%S'"
+        )
+    except:
+        header["date_created"] = datetime.strptime(
+            header["date_created"], "'%d-%b-%Y %H%M%S'"
+        )  # odd in 22-Nov-22
     return header
 
 
@@ -67,10 +77,16 @@ class APTrackRecording:
     probe_type: TypeID
     name: str
     details: str = ""
-    summarize = None
+    summarize: str = None
+    is_adc: bool = True
 
 
-def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record_no=1):
+def as_neo(
+    mng_files: List[APTrackRecording],
+    aptrack_events: str = None,
+    record_no=1,
+    fix_timestamps=True,
+):
     """
     Takes the openephys files and creates a single neo object containing the experiment data
 
@@ -83,25 +99,52 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
 
         header, ch_mmap = readContinous(f.filename)
         sampling_rate = float(header["sampleRate"]) * pq.Hz
-        ch_units_probe = pq.UnitQuantity(
-            "kmicroVolts", pq.uV / float(header["bitVolts"]), symbol="kuV"
-        )
+        if f.is_adc:
+            ch_units_probe = pq.CompoundUnit(f'{header["bitVolts"]} * V')
+            # pq.UnitQuantity(
+            #     "oe_Volts",
+            #     pq.V * float(header["bitVolts"]),
+            # )
+        else:
+            ch_units_probe = pq.CompoundUnit(f'{header["bitVolts"]} * uV')
+            # pq.UnitQuantity(
+            #     "oe_microVolts", pq.uV * float(header["bitVolts"])
+            # )
         # header['']
-        if record_no is not None and record_no >= 1:
+        # TODO: THIS BREAKS THINGS when record_no == 0 or None. as the recordings are dis-continuous the timestamps are off.
+        if record_no is not None and record_no >= 1 and False:  # DISABLED
             ch_mmap2 = ch_mmap[ch_mmap["recording"] == record_no - 1]
         else:
+            # 3 options:
+            #   1. use an irregularly sampled
+            #   2. fill in the gaps in the recording
+            #   3. add each recording as a new channel/segment.
             ch_mmap2 = ch_mmap
+
+        if len(np.unique(ch_mmap2["recording"])) > 1:
+            # 2.fill in the gaps
+            data = np.zeros(
+                shape=(ch_mmap2["timestamp"][-1] + 1024) - ch_mmap2["timestamp"][0],
+                dtype=np.int16,
+            )
+            for x in ch_mmap2:  # SLOOOOOW
+                ts = x["timestamp"] - ch_mmap2["timestamp"][0]
+                data[ts : ts + 1024] = x["data"]
+        else:
+            data = ch_mmap2["data"].flat
 
         t_start = (ch_mmap2["timestamp"][0] / float(header["sampleRate"])) * pq.s
         if f.probe_type == TypeID.ANALOG:
             asig = AnalogSignal(
-                ch_mmap2["data"].flat,
+                data,
                 sampling_rate=sampling_rate,
                 units=ch_units_probe,
                 type_id=f.probe_type.value,
                 name=f.name,
                 description=f.details,
                 t_start=t_start,
+                file_origin=str(f.filename),
+                date_created=header.get("date_created"),
             )
             seg.analogsignals.append(asig)
             if f.name.lower().startswith("rd"):
@@ -113,31 +156,50 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
                         name=f.name + ".bp",
                         description=f.details + "\n bandpass 100-7000Hz",
                         t_start=t_start,
+                        file_origin=str(f.filename),
+                        date_created=header.get("date_created"),
                     )
                 )
         elif f.probe_type == TypeID.TTL:
-            m = np.mean(ch_mmap2["data"])
+            m = np.mean(data)
             # find events from continuous file
             idxs = find_square_pulse_numpy(
-                ch_mmap2["data"].flat,
+                data,
                 int(int(header["sampleRate"]) * 0.0004),
-                (2 * np.std(ch_mmap2["data"] - m)) + m,
+                (2 * np.std(data - m)) + m,
             )  # 2sd from mean
 
             idxs_rising = idxs[
                 0
             ]  # [idxs[1]==1].astype(int) # only take the rising edge
+            t_rising = (idxs_rising / sampling_rate).rescale("ms")
+
+            to_keep = np.ones(shape=len(t_rising), dtype=bool)
+
+            for i, x in enumerate(t_rising):
+                if i == 0 or np.all(to_keep == False):
+                    continue
+                last_val = t_rising[i - np.searchsorted(to_keep[:i:-1], True) - 1]
+                if (x - last_val) < 100:
+                    to_keep[i] = False
+
+            t_rising = t_rising[to_keep]
+            # filter any < 100ms intervals (take first)
+
             seg.events.append(
                 Event(
-                    (idxs_rising / sampling_rate).rescale("s") + t_start,
+                    t_rising.rescale("s") + t_start,
                     type_id=TypeID.TTL.value,
                     name=f.name,
                     array_annotations={
                         "duration": (
-                            np.array(idxs[1] - idxs[0] - 1) / sampling_rate
+                            np.array(idxs[1][to_keep] - idxs[0][to_keep] - 1)
+                            / sampling_rate
                         ).rescale("s"),
-                        "maximum": (idxs[2] * ch_units_probe).rescale("mV"),
+                        "maximum": (idxs[2][to_keep] * ch_units_probe).rescale("mV"),
                     },
+                    file_origin=str(f.filename),
+                    date_created=header.get("date_created"),
                     description=f.details,
                 )
             )
@@ -147,9 +209,43 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
             raise Exception(f"Unsupported probe type '{f.probe_type}'")
 
     if aptrack_events is not None:
-        spike_events, stimChange_events, protocol_events = parse_APTrackEvents(
-            aptrack_events
+        (
+            spike_events,
+            stimChange_events,
+            protocol_events,
+            extra_events,
+        ) = parse_APTrackEvents(
+            aptrack_events  # , offset=t_start
         )
+        # HACK - find nearest event and add offset - due to bug in APTrack not saving the true latencies
+        if fix_timestamps:
+            new_spike_events = []
+            stim_evt = next(x for x in seg.events if x.name == "env.stim")
+            for i in range(len(spike_events)):
+                x = spike_events[i]
+                idx = np.searchsorted(stim_evt, x) - 1
+                if idx == -1:
+                    new_spike_events.append(
+                        x
+                    )  # cant relocate events prior to inital stim
+                    continue
+                spike_ts = stim_evt[idx]
+                new_spike_events.append(
+                    spike_ts
+                    + (
+                        (
+                            spike_events.array_annotations["spikeSampleLatency"][i]
+                            / sampling_rate.base
+                        )
+                        * pq.s
+                    )
+                )
+            spike_events = Event(
+                np.array(new_spike_events),
+                units=pq.second,
+                name=spike_events.name,
+                array_annotations=spike_events.array_annotations,
+            )
 
         units = []
         try:
@@ -159,8 +255,8 @@ def as_neo(mng_files: List[APTrackRecording], aptrack_events: str = None, record
                 units.append(e)
         except:
             pass
-        seg.events += units  # TODO: include the protocol info
-        seg.events += [stimChange_events, protocol_events]
+        seg.events += units
+        seg.events += [stimChange_events, protocol_events, extra_events]
     return seg
 
 
@@ -173,15 +269,23 @@ def parse_APTrackEvents(filename):
     curProtocolNo = 0
     curProtocolStep = 0
     sampleRate = 30000  # TODO: this should be found... somewhere? or neo may be able to handle timestamps
+    sep = None
+    other_messages = []
     for l in f.readlines():
-        l2 = l.split(" ", 1)
+        if sep is None:
+            val = re.finditer("\\d+([, ])", l)
+            try:
+                sep = next(val).group(1)
+            except:
+                continue
+        l2 = l.split(sep, 1)
         if len(l2) == 1:
             continue
         timestamp = int(l2[0])
         message = l2[1].strip()
         if message.find("Processor: ") >= 0:
             sampleRate = int(re.findall(r"(\d*)Hz", message)[0])
-        if message.find("setStimVoltage") >= 0:
+        elif message.find("setStimVoltage") >= 0:
             voltage = float(message.split(":")[1])
             stimulation_volts.append([timestamp, {"voltage": voltage}])
             continue
@@ -206,8 +310,9 @@ def parse_APTrackEvents(filename):
 
         else:
             logging.warning(f"did not parse log line: {message}")
+            other_messages.append([timestamp, {"message": message}])
 
-    def make_evt(arr):
+    def make_evt(arr):  # an arr containing [(timestamp, {details}),(...)]
         array_annotations = {}
         for _, evt in arr:
             for k, v in evt.items():
@@ -219,7 +324,13 @@ def parse_APTrackEvents(filename):
         return Event(  # A bit clunky - for spikeEvents this uses spikeSampleNumber, otherwise use the current timestamp
             np.array(
                 [
-                    (((x[1].get("spikeSampleNumber", 0)) or x[0]) / sampleRate)
+                    (
+                        (
+                            # (x[1].get("spikeSampleNumber", 0)) or # disable for now as this is not reporting correctly.
+                            x[0]
+                        )
+                        / sampleRate
+                    )
                     for x in arr
                 ]
             )
@@ -236,16 +347,25 @@ def parse_APTrackEvents(filename):
     evt_protocolInfo = make_evt(protocolInfo)
     evt_protocolInfo.name = "log.protocol"
 
-    return [evt_spikeInfo, evt_stimulation_volts, evt_protocolInfo]
+    evt_other = make_evt(other_messages)
+    evt_other.name = "log.other"
+
+    return [evt_spikeInfo, evt_stimulation_volts, evt_protocolInfo, evt_other]
 
 
-def process_folder(foldername: str, record_no=1, config=None):
+def process_folder(
+    foldername: str,
+    record_no=1,
+    config=None,
+    extra_channels: List[APTrackRecording] = [],
+):
     """
     taking a given folder convert to neo using the as_neo function
 
     default setup:
     CH1 = main
     ADC4 = stimVolt
+    ADC2 = potentiometer
     ADC5 = TTL
     ADC7 = Temperature
     ADC8 = Button
@@ -256,12 +376,12 @@ def process_folder(foldername: str, record_no=1, config=None):
     all_files = list(Path(foldername).glob(f"*.continuous"))
 
     def find_channel(chname, foldername=None):
-        channo = int(re.sub("[^\d]", "", chname))
+        channo = int(re.sub("[^\\d]", "", chname))
         if chname.startswith("ADC"):
             channo += 16  # sometimes there is just the channel number for ADC
         rex = f"_(((CH)?{channo})|({chname}))"
         if record_no > 1:
-            rex += f"(_{record_no})?"
+            rex += f"(_{record_no})"
         rex += ".continuous"
 
         matches = [x for x in all_files if len(re.findall(rex, str(x.name))) == 1]
@@ -269,12 +389,14 @@ def process_folder(foldername: str, record_no=1, config=None):
 
     if config is None:
         config = {}
+
     signals = [
         APTrackRecording(
             find_channel(config.get("rd.0", "CH1")),
             TypeID.ANALOG,
             "rd.0",
             "microneurography probe",
+            is_adc=False,
         ),  # main,
         APTrackRecording(
             find_channel(config.get("stimVolt", "ADC4")),
@@ -287,6 +409,12 @@ def process_folder(foldername: str, record_no=1, config=None):
             TypeID.TTL,
             "env.stim",
             "A TTL of the stimulation",
+        ),
+        APTrackRecording(
+            find_channel(config.get("stimVolt_pot", "ADC2")),
+            TypeID.ANALOG,
+            "env.potentiometer",
+            "A TTL of the stimulation voltage",
         ),
         APTrackRecording(
             find_channel(config.get("stim", "ADC5")),
@@ -307,31 +435,34 @@ def process_folder(foldername: str, record_no=1, config=None):
             "Manual button press, usually to signify a change in protocol or mechanical stimulation",
         ),
     ]
+    for aprec in extra_channels:
+        if not (Path(aprec.filename).exists()):
+            aprec.filename = find_channel(aprec.filename)
 
-    messages = Path(foldername) / "messages.events"
+        signals.append(aprec)
+    messages = Path(foldername) / (
+        "messages" + (f"_{record_no}" if record_no > 1 else "") + ".events"
+    )
     neo = as_neo(
         signals, str(messages) if messages.exists() else None, record_no=record_no
     )
 
+    settings_info = Path(foldername) / (
+        "settings" + (f"_{record_no}" if record_no > 1 else "") + ".xml"
+    )
+    if settings_info.exists():
+        neo.annotate(settings_info=settings_info.read_text())
+    settings_info = Path(foldername) / (
+        "Continuous_Data" + (f"_{record_no}" if record_no > 1 else "") + ".openephys"
+    )
+    if settings_info.exists():
+        neo.annotate(Continuous_Data=settings_info.read_text())
+
+    neo.annotate(
+        original_folder=str(foldername),
+    )
+
     return neo
-
-
-def process_oe_binary(folder):
-    """
-    CH1 = main
-    ADC4 = stimVolt
-    ADC5 = TTL
-    ADC7 = Temperature
-    ADC8 = Button
-    """
-    from open_ephys.analysis import Session
-
-    folder = "/Users/xs19785/Library/CloudStorage/OneDrive-UniversityofBristol/Microneurography/Data/2023-01-31_11-47-16/Record Node 103/"
-
-    sess = Session(folder)
-    recording = sess.recordings[0]
-
-    pass
 
 
 # def process_folder2(foldername:str, chnum):
@@ -375,7 +506,10 @@ def find_square_pulse_numpy(arr, width, threshold):
 
         while transitions_down[transitions_down_idx] < start:
             transitions_down_idx += 1
-
+            if transitions_down_idx >= len(transitions_down):  # awkward outer break
+                break
+        if transitions_down_idx >= len(transitions_down):
+            continue
         end = transitions_down[transitions_down_idx]
 
         if end - start > width:
@@ -445,9 +579,220 @@ def find_square_pulse(arr, width, threshold):
     return (out[:out_i], direction[:out_i], maxima[:out_i])
 
 
+def process_oe_binary(folder):
+    """
+    CH1 = main
+    ADC4 = stimVolt
+    ADC5 = TTL
+    ADC7 = Temperature
+    ADC8 = Button
+    """
+    from open_ephys.analysis import Session
+
+    # folder = "/Users/xs19785/Library/CloudStorage/OneDrive-UniversityofBristol/Microneurography/Data/2023-01-31_11-47-16/Record Node 103/"
+
+    sess = Session(folder)
+    recording = sess.recordings[0]
+    dat = recording.continuous[0]
+
+    sampling_rate = dat.metadata["sample_rate"] * pq.Hz
+    t_start = (dat.sample_numbers[0] / sampling_rate) * pq.s
+
+    def process_analog(channel, name, description, bandpass=False):
+        print(f"process_analog {channel}")
+        channo = next(
+            i for i, x in enumerate(dat.metadata["channel_names"]) if x == channel
+        )
+        data = dat.samples[:, channo]
+
+        ch_units_probe = pq.UnitQuantity(
+            "kmicroVolts", pq.uV * dat.metadata["bit_volts"][channo], symbol="kuV"
+        )
+        if bandpass:
+            data = apply_bandpass(
+                data * (sampling_rate), 500, 7000, sampleRate=sampling_rate
+            ).base
+            description = (description + "\n bandpass 500-7000Hz",)
+
+        return AnalogSignal(
+            data.flat,
+            sampling_rate=sampling_rate,
+            units=ch_units_probe,
+            type_id=TypeID.ANALOG.value,
+            name=name,
+            description=description,
+            file_origin=str(),
+        )
+
+    def process_ttl(channel, name, description):
+        print(f"process_ttl {channel}")
+        channo = next(
+            i for i, x in enumerate(dat.metadata["channel_names"]) if x == channel
+        )
+        ch_units_probe = pq.UnitQuantity(
+            "kmicroVolts", pq.uV * dat.metadata["bit_volts"][channo], symbol="kuV"
+        )
+        data = dat.samples[:, channo]
+        m = np.mean(data)
+        # find events from continuous file
+        idxs = find_square_pulse_numpy(
+            data.flat,
+            (sampling_rate * 0.0004).magnitude,
+            (2 * np.std(data)) + m,
+        )  # 2sd from mean
+
+        idxs_rising = idxs[0]  # [idxs[1]==1].astype(int) # only take the rising edge
+        return Event(
+            (idxs_rising / sampling_rate).rescale("s") + t_start,
+            type_id=TypeID.TTL.value,
+            name=name,
+            array_annotations={
+                "duration": (np.array(idxs[1] - idxs[0] - 1) / sampling_rate).rescale(
+                    "s"
+                ),
+                "maximum": (idxs[2] * ch_units_probe).rescale("mV"),
+            },
+            description=description,
+        )
+
+    seg = Segment()
+    seg.events.append(process_ttl("ADC4", "env.stimVolt", "A TTL of the stimulation"))
+    seg.analogsignals.append(process_analog("CH1", "rd.0", "microneurography probe"))
+    seg.analogsignals.append(
+        process_analog("CH1", "rd.0.bp", "microneurography probe", bandpass=True)
+    )
+    seg.events.append(process_ttl("ADC5", "env.stim", "A TTL of the stimulation"))
+    seg.analogsignals.append(
+        process_analog("ADC4", "env.stimVolt", "microneurography probe", bandpass=False)
+    )
+    seg.analogsignals.append(
+        process_analog(
+            "ADC2", "env.potentiometer", "microneurography probe", bandpass=False
+        )
+    )
+    seg.analogsignals.append(
+        process_analog(
+            "ADC7", "env.thermode", "Thermal stimulation temperatures", bandpass=False
+        )
+    )
+
+    seg.events.append(
+        process_ttl(
+            "ADC8",
+            "rec.button",
+            "Manual button press, usually to signify a change in protocol or mechanical stimulation",
+        )
+    )
+    seg.analogsignals.append(
+        process_analog(
+            "ADC8",
+            "rec.button",
+            "Manual button press, usually to signify a change in protocol or mechanical stimulation",
+        )
+    )
+
+    all_txt = []
+    all_tstamps = []
+    for p in Path(recording.directory).glob("events/**/TEXT_*"):
+        all_txt.append(np.load(p / "text.npy"))
+        all_tstamps.append(np.load(p / "timestamps.npy"))
+
+    all_txt = np.concatenate(all_txt)
+    all_tstamps = np.concatenate(all_tstamps)
+    spike_events, stimChange_events, protocol_events = parse_APTrackvents_bin(
+        all_txt, all_tstamps, sampling_rate
+    )
+
+    units = []
+    for x in np.unique(spike_events.array_annotations["spikeGroup"]):
+        e = spike_events[spike_events.array_annotations["spikeGroup"] == x]
+        e.name = f"unit_{x}"
+        units.append(e)
+    seg.events += [stimChange_events, protocol_events]
+
+    seg.events += units
+    return seg
+
+
+def parse_APTrackvents_bin(events, tstamps, sampleRate=30000):
+    stimulation_volts = []
+    spikeInfo = []
+    protocolInfo = []
+    curProtocol = ""
+    curProtocolNo = 0
+    curProtocolStep = 0
+
+    for l, timestamp in zip(events, tstamps):
+
+        message = l.decode()
+        if message.find("Processor: ") >= 0:
+            sampleRate = int(re.findall(r"(\d*)Hz", message)[0])
+        if message.find("setStimVoltage") >= 0:
+            voltage = float(message.split(":")[1])
+            stimulation_volts.append([timestamp, {"voltage": voltage}])
+            continue
+        elif message.find("spikeSampleNumber") >= 0:
+            d = json.loads(
+                message.replace("'", '"')
+            )  # TODO: fix the json encoding in the plugin
+            spikeInfo.append([timestamp, d])
+        elif message.find("starting stimulus") >= 0:
+            curProtocol = message.split("starting stimulus protocol ")[1]
+            curProtocolNo += 1
+            curProtocolStep = 0
+
+        elif message.find("voltage:") >= 0:  # TODO: convert this into json encoded.
+            elements = message.split(";")
+            curProtocolStep += 1
+            d = {e.split(":")[0].strip(): float(e.split(":")[1]) for e in elements}
+            d["protocol"] = curProtocol
+            d["protocolIdx"] = curProtocolNo
+            d["step"] = curProtocolStep
+            protocolInfo.append([timestamp, d])
+
+        else:
+            logging.warning(f"did not parse log line: {message}")
+
+    def make_evt(arr):
+        array_annotations = {}
+        for _, evt in arr:
+            for k, v in evt.items():
+
+                array_annotations[k] = array_annotations.get(k, []) + [v]
+        for k, v in array_annotations.items():
+            array_annotations[k] = np.array(v)
+
+        return Event(  # A bit clunky - for spikeEvents this uses spikeSampleNumber, otherwise use the current timestamp
+            np.array(
+                [
+                    (((x[1].get("spikeSampleNumber", 0)) or x[0]) / sampleRate)
+                    for x in arr
+                ]
+            )
+            * pq.s,
+            array_annotations=array_annotations,
+        )
+
+    evt_spikeInfo = make_evt(
+        spikeInfo
+    )  # TODO: this needs to split by spikeGroup to work in viewer
+
+    evt_stimulation_volts = make_evt(stimulation_volts)
+    evt_stimulation_volts.name = "log.stimVolt"
+    evt_protocolInfo = make_evt(protocolInfo)
+    evt_protocolInfo.name = "log.protocol"
+
+    return [evt_spikeInfo, evt_stimulation_volts, evt_protocolInfo]
+
+
 try:
     import numba
 
     find_square_pulse = numba.jit(find_square_pulse)
 except:
     logging.info("optional dependency numba will speed up find_square_pulse method")
+
+# ##!
+# def test_load():
+#     path = "/Users/xs19785/Library/CloudStorage/OneDrive-UniversityofBristol/Microneurography/Data/2023-03-14_14-11-52/Record Node 104"
+#     data = process_folder(path)

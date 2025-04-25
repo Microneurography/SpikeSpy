@@ -94,12 +94,10 @@ class TrackingView(QMainWindow):
         )  # find the most recent event
 
         starting_time = unit_events[max(last_event - 1, 0)]
-        threshold = (
-            self.state.analog_signal[
-                self.state.analog_signal.time_index(starting_time)
-            ][0]
-            * 0.8
-        ).rescale("mV")
+        dat = self.state.analog_signal.time_slice(
+            starting_time, starting_time + 0.1 * pq.ms
+        )
+        threshold = (dat[0] * 0.8).rescale("mV")
         self.qsb_threshold.setValue(threshold)
 
     def trackUnit(self):

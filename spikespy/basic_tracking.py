@@ -28,20 +28,22 @@ def track_basic(
     traced_times = []
     skipped = 0
 
-    def time_to_index(ts):
-        return int(((ts - raw_data.t_start) * raw_data.sampling_rate).base)
-
     for x in stimulus_events[start_idx:]:
-        t_start = time_to_index(x + offset - (window / 2))
-        t_end = time_to_index(x + offset + (window / 2))
+        timeslice = raw_data.time_slice(
+            x + offset - (window / 2), x + offset + (window / 2)
+        )
+        if threshold < 0:
+            timeslice = timeslice * -1
+        max_idx = np.argmax(timeslice)
+        max_val = timeslice[max_idx]
 
-        max_idx = np.argmax(raw_data[t_start:t_end] * (-1 if threshold < 0 else 1))
-        max_val = raw_data[t_start + max_idx]
         if (max_val >= threshold and threshold >= 0) or (
             max_val <= threshold and threshold < 0
         ):
             skipped = 0
-            max_ts = ((max_idx + t_start) / raw_data.sampling_rate) + raw_data.t_start
+            max_ts = timeslice.times[
+                max_idx
+            ]  # ((max_idx + t_start) / raw_data.sampling_rate) + raw_data.t_start
             traced_times.append(max_ts.rescale("s"))
             offset = max_ts - x
         else:
@@ -58,7 +60,7 @@ def track_basic(
 
 
 def test_track_basic():
-    fname = r"test_data/test_annotated.h5"
+    fname = r"data/test2.h5"
     data = neo.NixIO(fname, "ro").read_block().segments[0]
     stimulus_events = data.events[0]
 
@@ -74,3 +76,7 @@ def test_track_basic():
         window=window,
         threshold=threshold,
     )
+
+
+if __name__ == "__main__":
+    print(test_track_basic())

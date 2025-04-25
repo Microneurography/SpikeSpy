@@ -1,30 +1,21 @@
-# SpikeSpy
-
-A gui for annotating stimulus locked electrophysiology data (microneurography)
+# SpikesPy
 
 
-## Simple install
- ```{bash}
-# 1. get a working version of python (> 3.9) from https://www.python.org, and git
-# 2. [Optional] install pipx - a program manager for python
-> python -m pip install pipx
- 
-# 3. install spikespy
-> pipx install git+https://github.com/Microneurography/SpikeSpy
+A graphical user interface (GUI) designed for annotating stimulus-locked electrophysiology data, specifically tailored for microneurography research.
 
-installed package SpikeSpy 0.1.8, installed using Python 3.9.1
-These apps are now globally available
-    - spikespy
-done! ✨ 🌟 ✨
+## Getting started
 
-# (alternitively install using pip directly with "pip install")
+### Installation
 
-# 4. run spikespy
+To install SpikeSpy, we recommend using `uv`, modern Python application managers.Learn more about `uv` and how to install it by visiting [uv](https://github.com/astral-sh/uv), or install it with pip `pip install uv`. 
+Alternatively, you can install SpikeSpy using `pip` within a virtual environment or using pipx. 
 
+### Steps:
+
+```bash
+# Install SpikeSpy using uv
+> uv tool install git+https://github.com/Microneurography/SpikeSpy
+
+# 4. Run SpikeSpy
 > spikespy
 ```
-
-## User Guide
-
-[WIP]
-

@@ -3,6 +3,8 @@ import sys
 from dataclasses import dataclass, field
 
 import matplotlib
+import matplotlib.axes
+from matplotlib.collections import PatchCollection
 import matplotlib.style as mplstyle
 import numpy as np
 import PySide6
@@ -30,16 +32,26 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFormLayout,
     QDoubleSpinBox,
+    QToolBar,
+    QLabel,
+    QSpacerItem,
+    QSizePolicy
 )
 from PySide6 import QtCore
-
+from PySide6.QtCore import QTimer
 from .NeoSettingsView import NeoSettingsView
 from .ViewerState import ViewerState, tracked_neuron_unit
 
-mplstyle.use("fast")
+from .QMatplotlib import QMatplotlib
+from matplotlib.lines import Line2D
+import time
+
+#mplstyle.use("fast")
 
 from matplotlib.axes import Axes
-
+from .helpers import qsignal_throttle_wrapper
+from matplotlib.image import AxesImage
+from .CachedAxesImage import CachedAxesImage
 
 class falling_leaf_plotter:
     def __init__(self):
@@ -50,9 +62,9 @@ class falling_leaf_plotter:
         self.cb2 = None
         self.mode = None
         self.partial = False
-
+        self.hline = None
     def setup(self, ax: Axes, erp, sampling_rate=1000, mode="heatmap"):
-        self.percentiles = np.percentile(erp, np.arange(100))
+        self.percentiles = np.arange(0,100)*2*np.sqrt(np.mean(erp**2))#np.percentile(erp, np.arange(100))
         self.mode = mode
 
         # self.cb2 = ax.callbacks.connect("ylim_changed", self.setup)
@@ -66,7 +78,7 @@ class falling_leaf_plotter:
         )  # this locator puts ticks at regular intervals
         ax.xaxis.set_major_locator(loc)
 
-    def plot_main(self, mode, ax: Axes, erp, partial=True):
+    def plot_main(self, mode, ax: Axes, erp, partial=True,clim=None):
         self.mode = mode
 
         ylim = ax.get_ylim()
@@ -77,9 +89,15 @@ class falling_leaf_plotter:
             im_data = erp[ylim[0] : ylim[1], xlim[0] : xlim[1]]
         else:
             im_data = erp
+            xlim = [0, erp.shape[1]]
+            ylim = [0, erp.shape[0]]
+        im_data=im_data
         if mode == "heatmap":
             if self.ax_track_leaf is not None:
-                self.ax_track_leaf.remove()
+                try:
+                    self.ax_track_leaf.remove()
+                except:
+                    pass
                 self.ax_track_leaf = None
 
             if self.ax_track_cmap is not None:
@@ -91,22 +109,31 @@ class falling_leaf_plotter:
             #    self.ax_track_cmap.remove()
             ax.set_autoscale_on(False)
 
-            self.ax_track_cmap = ax.imshow(
-                np.abs(im_data),
-                aspect="auto",
+            self.ax_track_cmap = CachedAxesImage(
+                ax,
                 cmap="gray_r",
-                clim=(self.percentiles[40], self.percentiles[95]),
-                extent=(xlim[0], xlim[1], ylim[1], ylim[0]),
-                interpolation="antialiased",  # slows down render (i suspect)
+                interpolation="antialiased",
+                rolling_max=True,
+
             )
-            self.ax_track_cmap.set_animated(True)
-            ax.draw_artist(self.ax_track_cmap)
-            self.ax_track_cmap.set_visible(True)
+            
+            self.ax_track_cmap.set_data(
+                np.clip(im_data, 0, np.max(im_data))
+            )
+            self.ax_track_cmap.set_extent((xlim[0], xlim[1], ylim[1], ylim[0]))
+            if clim is None:
+                clim = (self.percentiles[40], self.percentiles[95])
+            self.ax_track_cmap.set_clim(*clim)
+            self.ax_track_cmap._scale_norm(None,None,None)
+            ax.add_artist(self.ax_track_cmap)
+            # self.ax_track_cmap.set_animated(True)
+            # ax.draw_artist(self.ax_track_cmap)
+            # self.ax_track_cmap.set_visible(False)
         elif mode == "lines":
             if self.ax_track_cmap is not None:
                 self.ax_track_cmap.set_visible(False)
 
-            p90 = self.percentiles[95] * 4
+            p90 = np.std(self.im_data)*10 #self.percentiles[95] * 4
             analog_signal_erp_norm = np.clip(
                 im_data,
                 -p90,
@@ -141,6 +168,7 @@ class falling_leaf_plotter:
             #     zorder=10,
             # )
 
+
     def highlight_stim(self, ax, stimNo, partial=True):
         if stimNo is None:
             return
@@ -155,6 +183,8 @@ class falling_leaf_plotter:
                 for x in range(len(ax_leaf_paths))
             ]
             self.ax_track_leaf.set_colors(new_colors)
+            #ax.draw_artist(self.ax_track_leaf)
+            return self.ax_track_leaf
 
             # op: lines.Line2D = self.mainPlotter.ax_track_leaf[stimNo]
 
@@ -164,12 +194,20 @@ class falling_leaf_plotter:
             # self.hline.update_from(op)
             # self.hline.set_color("purple")
         else:
+            #self.hline.set_visible(True)
+            if self.hline is not None:
+                try:
+                    self.hline.remove()
+                except:
+                    pass
             self.hline = ax.axhline(stimNo)
-            self.hline.set_animated(True)
+            #self.hline.set_animated(True)
 
-            ax.draw_artist(self.hline)
+            #ax.draw_artist(self.hline)
+            return self.hline
 
     def plot_spikegroup(self, ax, sg, **kwargs):
+        kwargs = {"alpha":0.5, **kwargs}
 
         points = np.array(
             [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
@@ -178,7 +216,9 @@ class falling_leaf_plotter:
             return
         scat = ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
         # scat.set_animated(True)
-        ax.draw_artist(scat)
+        #ax.draw_artist(scat)
+        return [scat]
+
 
 
 class MultiTraceView(QMainWindow):
@@ -191,6 +231,7 @@ class MultiTraceView(QMainWindow):
     ):
 
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setFocusPolicy(Qt.ClickFocus)
         self.state: ViewerState = None
         self.ax_track_cmap = None
@@ -198,10 +239,19 @@ class MultiTraceView(QMainWindow):
         self.points_spikegroup = None
         self.hline = None
         self.figcache = None
+        self.references = []
+
+        # throttle the update for upateAll to every 500ms when using the comboboxes.
+        self.update_timer = QTimer()
+        self.update_timer.setSingleShot(True)
+        self.update_timer.timeout.connect(self.updateAll)
+        self.update_timer.setInterval(500)
+        self.close_conn = self.destroyed.connect(lambda: self.closeEvent())
 
         xsize = 1024
         ysize = 480
         dpi = 80
+        self.plotter = falling_leaf_plotter()
 
         self.fig = Figure(figsize=(xsize / dpi, ysize / dpi), dpi=dpi)
         self.fig.canvas.mpl_connect("button_press_event", self.view_clicked)
@@ -209,6 +259,8 @@ class MultiTraceView(QMainWindow):
         self.mode = "heatmap"
 
         self.gs = self.fig.add_gridspec(1, 2, width_ratios=[3, 1])
+
+        
         self.ax = self.fig.add_subplot(self.gs[0, 0])
         self.ax_right = []
         # self.ax_right_fig = self.fig.add_subfigure(self.gs[0,1])
@@ -228,16 +280,17 @@ class MultiTraceView(QMainWindow):
         layout = QVBoxLayout()
         self.lowerSpinBox = QSpinBox(self)
         self.lowerSpinBox.setRange(0, 99)
-        self.lowerSpinBox.valueChanged.connect(lambda x: self.updateAll())
+        self.lowerSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
 
         self.upperSpinBox = QSpinBox(self)
-        self.upperSpinBox.setRange(0, 99)
-        self.upperSpinBox.setValue(95)
+        self.upperSpinBox.setRange(0, 100)
+        self.upperSpinBox.setValue(10)
         self.lowerSpinBox.valueChanged.connect(self.upperSpinBox.setMinimum)
         self.upperSpinBox.valueChanged.connect(self.lowerSpinBox.setMaximum)
-        self.lowerSpinBox.setValue(45)
-        self.upperSpinBox.valueChanged.connect(lambda x: self.updateAll())
+        self.lowerSpinBox.setValue(1)
+        self.upperSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
 
+        self.referneces = []
         self.lock_to_stimCheckBox = QCheckBox("lock")
 
         def set_lock(*args):
@@ -246,7 +299,10 @@ class MultiTraceView(QMainWindow):
 
         self.lock_to_stimCheckBox.stateChanged.connect(set_lock)
 
-        self.includeAllUnitsCheckBox = QCheckBox("All units")
+        self.includeUnitCheckbox = QCheckBox("Tracked")
+        self.includeUnitCheckbox.setChecked(True)
+        self.includeUnitCheckbox.stateChanged.connect(lambda x: self.render())
+        self.includeAllUnitsCheckBox = QCheckBox("Others")
         self.includeAllUnitsCheckBox.stateChanged.connect(lambda x: self.render())
 
         butgrp = QButtonGroup()
@@ -271,6 +327,7 @@ class MultiTraceView(QMainWindow):
             if checked:
                 self.mode = mode
                 self.setup_figure()
+            self.view.draw()
 
         butgrp.idToggled.connect(buttonToggled)
 
@@ -281,21 +338,32 @@ class MultiTraceView(QMainWindow):
         self.settingsDialog = DialogSignalSelect()
         self.settingsButton.clicked.connect(lambda: self.settingsDialog.show())
         self.rightPlots = {}
-
-        layout2 = QHBoxLayout()
-        layout2.addWidget(self.lowerSpinBox)
-        layout2.addWidget(self.upperSpinBox)
-        layout2.addWidget(self.includeAllUnitsCheckBox)
-        layout2.addWidget(self.lock_to_stimCheckBox)
-        layout2.addWidget(linesRadio)
-        layout2.addWidget(heatmapRadio)
-        layout2.addWidget(unitOnlyRadio)
-        layout2.addWidget(self.polySelectButton)
-        layout2.addWidget(self.settingsButton)
-
-        layout.addLayout(layout2)
+        toolbar2 = QToolBar("Controls", self)
+        toolbar2.addWidget(QLabel("Colour scale (std): "))
+        toolbar2.addWidget(QLabel("Min"))
+        toolbar2.addWidget(self.lowerSpinBox)
+        toolbar2.addWidget(QLabel("Max"))
+        toolbar2.addWidget(self.upperSpinBox)
+        toolbar2.addSeparator()
+        toolbar2.addWidget(QLabel("Units:"))
+        toolbar2.addWidget(self.includeUnitCheckbox)
+        toolbar2.addWidget(self.includeAllUnitsCheckBox)
+        toolbar2.addSeparator()
+        toolbar2.addWidget(QLabel("Mode:"))
+        toolbar2.addWidget(self.lock_to_stimCheckBox)
+        toolbar2.addWidget(linesRadio)
+        toolbar2.addWidget(heatmapRadio)
+        toolbar2.addWidget(unitOnlyRadio)
+        toolbar2.addSeparator()
+        
+        
+        toolbar2.addWidget(self.polySelectButton)
+        toolbar2.addWidget(self.settingsButton)
+        
+        self.addToolBarBreak()
+        self.addToolBar(Qt.TopToolBarArea, toolbar2)
+        #layout.addLayout(layout2)
         layout.addWidget(self.view)
-
         w = QWidget(self)
         w.setLayout(layout)
         self.setCentralWidget(w)
@@ -313,13 +381,17 @@ class MultiTraceView(QMainWindow):
         )  # useblit does not work (for unknown reasons)
         self.pg_selector.set_active(False)
         self.update_axis()
-        self.blit()
+        
 
+        # @qsignal_throttle_wrapper(interval=33)
         def draw_evt(evt):
-            self.blit()
-            self.render()
-
-        self.fig.canvas.mpl_connect("draw_event", draw_evt)
+            with self.fig.canvas.callbacks.blocked():
+                # self.blit()
+                self.render()
+        
+        #self.fig.canvas.mpl_connect("draw_event", draw_evt)
+        # self.ax.callbacks.connect("xlim_changed", draw_evt)
+        # self.ax.callbacks.connect("ylim_changed", draw_evt)
 
         self.dialogPolySelect = DialogPolySelect(self)
         self.dialogPolySelect.onSubmit.connect(self.polySelect)
@@ -394,6 +466,9 @@ class MultiTraceView(QMainWindow):
     def toggle_polySelector(self, mode=None):
         self.pg_selector.set_active(mode or (not self.pg_selector.active))
         if self.pg_selector.active == 1:
+            self.pg_selector.ax = self.ax
+            if self.pg_selector._selection_artist not in self.ax.lines:
+                self.ax.add_line(self.pg_selector._selection_artist)
             self.pg_selector.connect_default_events()
             self.pg_selector._selection_completed = False
             self.pg_selector.set_visible(True)
@@ -417,22 +492,56 @@ class MultiTraceView(QMainWindow):
 
         self.update()
 
+    def closeEvent(self, *args):
+        self.remove_references()
+        self.dialogPolySelect.close()
+        self.settingsDialog.close()
+        self.pg_selector.set_active(False)
+
+    def remove_references(self, *args, **kwargs):
+        if self.state is not None:
+            for ref in self.references:
+                self.state.disconnect(ref)
+
     def set_state(self, state):
         self.state = state
-        self.state.onLoadNewFile.connect(self.reset_right_axes_data)
-        self.state.onLoadNewFile.connect(self.setup_figure)
-        self.state.onLoadNewFile.connect(self.update_axis)
 
-        self.state.onUnitGroupChange.connect(lambda *args: self.render())
-        self.state.onUnitChange.connect(lambda *args: self.render())
-        self.state.onUnitGroupChange.connect(lambda *args: self.reset_right_axes_data())
+        self.remove_references()
 
-        self.state.onStimNoChange.connect(self.update_ylim)
-        self.state.onStimNoChange.connect(lambda *args: self.render())
+        if self.state is None:
+            return
 
+        self.references.append(
+            self.state.onLoadNewFile.connect(self.reset_right_axes_data)
+        )
+        self.references.append(self.state.onLoadNewFile.connect(self.setup_figure))
+        self.references.append(self.state.onLoadNewFile.connect(self.update_axis))
+
+        self.references.append(
+            self.state.onUnitGroupChange.connect(lambda *args: self.render())
+        )
+        self.references.append(
+            self.state.onUnitChange.connect(lambda *args: self.render())
+        )
+        self.references.append(
+            self.state.onUnitGroupChange.connect(
+                lambda *args: self.reset_right_axes_data()
+            )
+        )
+
+        self.references.append(self.state.onStimNoChange.connect(self.update_ylim))
+        self.references.append(
+            self.state.onStimNoChange.connect(lambda *args: self.plot_curstim_line(self.state.stimno))
+        )
+        self.references.append(
+            self.state.onUnitChange.connect(lambda x: self.reset_right_axes_data())
+        )
+
+        self.update_axis()
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
 
+    #@qsignal_throttle_wrapper(1000)
     def reset_right_axes_data(self):
         if self.state is None:
             return
@@ -466,16 +575,18 @@ class MultiTraceView(QMainWindow):
                 pass
 
         self.rightPlots = {k: True for k, v in self.right_ax_data.items()}
+        if self.settingsDialog is not None:
+            self.settingsDialog.destroy()
         self.settingsDialog = DialogSignalSelect(options=self.rightPlots)
 
         def updateView(k, v):
             self.rightPlots[k] = v
             self.plot_right_axis()
-            self.view.update()
+            self.render()
 
         self.settingsDialog.changeSelection.connect(updateView)
         self.plot_right_axis()
-
+        self.view.draw_idle()
     def setup_figure(self):
         mode = self.mode
         if self.state is None:
@@ -484,48 +595,41 @@ class MultiTraceView(QMainWindow):
             return
 
         # self.ax_right_fig.clear()
-        self.percentiles = np.percentile(np.abs(self.state.get_erp()), np.arange(100))
-        if self.ax_track_leaf is not None:
-            [x.remove() for x in self.ax_track_leaf]
-            self.ax_track_leaf = None
-        if self.ax_track_cmap is not None:
-            self.ax_track_cmap.remove()
-            self.ax_track_cmap = None
+        erp = self.state.get_erp()
+        #erp = np.clip(erp, 0, np.max(erp))
+        self.std = np.std(erp)
+        #self.percentiles = self.percentiles = np.linspace(0,10,101)*np.std((erp - np.mean(erp)))#np.percentile(erp, np.arange(100))#np.percentile(erp[erp>0], np.arange(101))
+        ylim = self.ax.get_ylim()
+        xlim = self.ax.get_xlim()
+        if self.plotter is not None:
+            try:
+                self.plotter.ax_track_cmap.remove()
+            except:
+                pass
+            try:
+                self.plotter.ax_track_leaf.remove()
+            except:
+                pass
+            try:
+                self.plotter.hline.remove()
+            except:
+                pass
+            
+        self.plotter.setup(
+            self.ax, erp, sampling_rate=self.state.sampling_rate, mode=mode
+        )
+        self.plotter.plot_main(mode=self.mode, ax=self.ax, erp=erp, partial=False,clim=(self.std*self.lowerSpinBox.value(), self.std*self.upperSpinBox.value()))
+        self.ax.set_ylim(ylim)
+        self.ax.set_xlim(xlim)
+        self.ax.set_autoscale_on(False)
 
-        if mode == "heatmap":
-            self.ax_track_cmap = self.ax.imshow(
-                np.abs(self.state.get_erp()),
-                aspect="auto",
-                cmap="gray_r",
-                clim=(
-                    self.percentiles[self.lowerSpinBox.value()],
-                    self.percentiles[self.upperSpinBox.value()],
-                ),
-                interpolation="antialiased",  # slows down render (i suspect)
-            )
-
-        elif mode == "lines":
-
-            p90 = self.percentiles[95] * 4
-            analog_signal_erp_norm = np.clip(self.state.get_erp(), -p90, p90) / (
-                p90 * 2
-            )
-            self.ax_track_leaf = self.ax.plot(  # could increase performance to just plot lines in view. but then no blitting...
-                (
-                    (analog_signal_erp_norm * -1)
-                    + np.arange(analog_signal_erp_norm.shape[0])[:, np.newaxis]
-                ).T,
-                color="gray",
-                zorder=10,
-            )
-        else:
-            pass
-        if self.points_spikegroup is not None:
-            self.points_spikegroup.remove()
-            self.points_spikegroup = None
         self.view.update()
-        self.blit()
-        # self.plot_spikegroups()
+        #self.blit()
+
+        self.plotter.highlight_stim(self.ax,self.state.stimno)
+
+        
+        self.plot_spikegroups()
         # self.plot_curstim_line(self.state.stimno)
 
         self.plot_right_axis()
@@ -534,6 +638,7 @@ class MultiTraceView(QMainWindow):
         return [x for x in [self.ax_track_cmap, self.ax_track_leaf] if x is not None]
         # self.view.draw_idle()
 
+    #@qsignal_throttle_wrapper(1000)
     def plot_right_axis(self):
         for ax in self.ax_right:
             ax.remove()
@@ -554,18 +659,19 @@ class MultiTraceView(QMainWindow):
         ):
 
             self.ax_right.append(self.fig.add_subplot(gs00[0, i], sharey=self.ax))
-            self.ax_right[i].set_yticks([])
+            if i>0:
+                self.ax_right[i].tick_params(axis="y", labelleft=False)
             c = next(colorwheel)
             self.ax_right[i].plot(*data, label=label, color=c)
             self.ax_right[i].set_xlabel(label)
             self.ax_right[i].xaxis.label.set_color(c)
             self.ax_right[i].tick_params(axis="y", colors=c)
-        # for ax in self.ax_right:
-        #     try:
-        #         ax.draw_idle()
-        #     except:
-        #         pass
-        self.view.draw_idle()  # TODO - this slows things down as it re-renders the image plot also.
+        for ax in self.ax_right:
+            try:
+                ax.draw(self.fig.canvas.get_renderer())
+            except:
+                pass
+        # self.view.draw_idle()  # TODO - this slows things down as it re-renders the image plot also.
 
     def update_ylim(self, curStim):
         if self.lock_to_stim:
@@ -582,6 +688,8 @@ class MultiTraceView(QMainWindow):
             return
         if self.state.analog_signal is None:
             return
+        self.ax.set_ylim(len(self.state.event_signal), 0)
+        self.ax.set_xlim(0, len(self.state.analog_signal_erp[0]))
 
         class CustomFormatter(matplotlib.ticker.Formatter):
             def __init__(self, ax, func):
@@ -637,17 +745,16 @@ class MultiTraceView(QMainWindow):
 
     points_spikegroups = None
 
-    @Slot()
     def plot_spikegroups(self, sgidx=None):
         if self.points_spikegroups is None:
             pass  # TODO optimisation of setting x_data rather than replotting
         else:
-            for x in self.points_spikegroups:
-                try:
+            try:
+                for x in self.points_spikegroups:
                     x.remove()
-                except:
-                    pass
-        self.points_spikegroups = []
+            except:
+                pass
+        points_spikegroups = []
 
         def plot(sgidx, **kwargs):
             sg = self.state.getUnitGroup(sgidx)
@@ -658,39 +765,65 @@ class MultiTraceView(QMainWindow):
             if len(points) == 0:
                 # self.view.draw_idle()
                 return
-            scat = self.ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
-            scat.set_animated(True)
-            self.ax.draw_artist(scat)
-            return scat
+            #scat = self.ax.scatter(points[:, 0], points[:, 1], s=10, **kwargs)
+            points_spikegroups = []
+            for point in points:
+                rect = matplotlib.patches.Rectangle(
+                    (point[0] - 5, point[1] ), 10, 1, **kwargs
+                )
+
+                points_spikegroups.append(rect)
+            
+            #scat.set_animated(True)
+            #self.ax.draw_artist(scat)
+            points_spikegroups = PatchCollection(points_spikegroups, **kwargs)
+            self.ax.add_collection(points_spikegroups)
+            return points_spikegroups
 
         # include other units
         from matplotlib.cm import get_cmap
 
+        points_spikegroups = []
         colors = get_cmap("Set2").colors
         if self.includeAllUnitsCheckBox.isChecked():
             for i, x in enumerate(self.state.spike_groups):
                 if i == self.state.cur_spike_group:
                     continue
                 artists = plot(i, color=colors[i % len(colors)])
-                self.points_spikegroups.append(artists)
+                points_spikegroups.append(artists)
+                
         # bg = self.
-        artists = plot(self.state.cur_spike_group, color="red")
-        self.points_spikegroups.append(artists)
+        if self.includeUnitCheckbox.isChecked():
+            artists = plot(self.state.cur_spike_group, color="red", alpha=0.6 if self.mode=="heatmap" else 1)
+            points_spikegroups.append(artists)
+        self.points_spikegroups = points_spikegroups
+
+
+
         return self.points_spikegroups
 
-    def blit(self):
-        # self.fig.canvas.draw()
-        self.blit_data = self.fig.canvas.copy_from_bbox(self.ax.bbox)
-
+    # @qsignal_throttle_wrapper(interval=33)
     def render(self):
 
-        # self.view.draw_idle()
-        self.fig.canvas.restore_region(self.blit_data)
-        o = self.plot_curstim_line(self.state.stimno)
+        self.view.draw_idle()
+    
+        #self.fig.canvas.restore_region(self.blit_data)
+        #o = self.plot_curstim_line(self.state.stimno)
+
+       
         o2 = self.plot_spikegroups()
+        
+        if self.pg_selector.active:
+            self.pg_selector.set_visible(True)
+  
+
+
+            #self.pg_selector._draw_polygon()
+            
+            #self.pg_selector.draw()
 
         self.view.update()
-        return o + o2
+        #return  o2
         # try:
         #     self.ax.redraw_in_frame()
         # except:
@@ -698,41 +831,19 @@ class MultiTraceView(QMainWindow):
         # self.view.update()
 
     def plot_curstim_line(self, stimNo=None):
-        if stimNo is None:
-            return
-        if self.hline is not None:
-            del self.hline
-
-        if self.mode == "lines":
-            from matplotlib import lines
-
-            op: lines.Line2D = self.ax_track_leaf[stimNo]
-
-            self.hline = lines.Line2D(*self.ax_track_leaf[stimNo].get_data())
-            self.hline.update_from(op)
-            self.hline.set_color("purple")
-
-        else:
-            self.hline = self.ax.axhline(stimNo)
-        self.hline.set_animated(True)
-
-        self.ax.draw_artist(self.hline)
-
-        # self.view.draw_idle()
-        # self.ax_track_cmap.draw()
-        # self.view.draw_idle()
-        # self.view.update()
-        return [self.hline]
+        self.plotter.highlight_stim(self.ax, stimNo, partial=False)
+        self.view.draw_idle()
 
     @Slot()
     def updateAll(self):
-        if self.mode != "heatmap" or self.ax_track_cmap is None:
+        if self.mode != "heatmap" or self.plotter.ax_track_cmap is None:
             pass
         else:
-
-            self.ax_track_cmap.set_clim(
-                self.percentiles[self.lowerSpinBox.value()],
-                self.percentiles[self.upperSpinBox.value()],
+            vmin = self.std * self.lowerSpinBox.value() #self.percentiles[self.lowerSpinBox.value()]
+            vmax = self.std*self.upperSpinBox.value() #self.percentiles[self.upperSpinBox.value()]
+            self.plotter.ax_track_cmap.set_clim(
+                vmin,
+                max(vmin+0.001, vmax),
             )
             # self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
             self.view.draw_idle()
@@ -744,18 +855,15 @@ class MultiTraceView(QMainWindow):
         # if e.inaxes == self.ax:
         self.state.setStimNo(round(e.ydata))
 
-
-from matplotlib.lines import Line2D
+    def __del__(self):
+        self.remove_references()
+        self.close_conn.disconnect()
+        super().__del__()
 
 
 class LineSelector(PolygonSelector):
     # self.outerlines = None
     # def calculate_hits
-    def _draw_polygon(self):
-        # if self.outerlines is None:
-        # self.outerlines = Line2D
-
-        super()._draw_polygon()
 
     def _release(self, event):
         """Button release event handler."""

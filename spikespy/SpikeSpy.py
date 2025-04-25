@@ -6,6 +6,7 @@ from datetime import datetime
 from os import environ
 from pathlib import Path
 from typing import Any, List, Optional, Union
+from csv import writer
 
 import matplotlib
 import matplotlib.style as mplstyle
@@ -15,7 +16,7 @@ import PySide6
 import quantities as pq
 import logging
 from matplotlib.widgets import PolygonSelector
-from neo.io import NixIO
+from neo.io import NixIO, NixIOFr
 from PySide6.QtCore import (
     QAbstractTableModel,
     QModelIndex,
@@ -52,6 +53,9 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
+from spikespy.check_update import ReleaseNotesDialog, VersionCheckThread
+from spikespy.processing import MultiAnalogSignal
+
 # import PySide6QtAds as QtAds
 from .mng_file_selector import QNeoSelector
 from .MultiTraceView import MultiTraceView
@@ -62,11 +66,26 @@ from .TrackingView import TrackingView
 from .UnitView import UnitView
 from .ViewerState import ViewerState, prompt_for_neo_file, tracked_neuron_unit
 from .EventView import EventView
-
+from .MultiTraceFixedView import MultiTraceFixedView
+from .UnitSuggestor import UnitSuggestor
 import PySide6QtAds as QtAds
-
+from typing import Dict
 mplstyle.use("fast")
 
+window_options = {
+    # 'TraceAnnotation': TraceView,
+    "MultiTrace": MultiTraceView,
+    "MultiTraceFixedView": MultiTraceFixedView,
+    "UnitView": UnitView,
+    "SpikeGroupTable": SpikeGroupTableView,
+    "SingleTraceView": SingleTraceView,
+    "Settings": NeoSettingsView,
+    "TrackingView": TrackingView,
+    "Data": QNeoSelector,
+    "Events": EventView,
+}
+suggestors:Dict[str,UnitSuggestor] = {
+}
 
 class MdiView(QMainWindow):
     # signals
@@ -120,10 +139,17 @@ class MdiView(QMainWindow):
 
         self.dock_manager.openPerspective("main")
 
+    def handle_version_check_result(self, result):
+        if result is not None:
+            version, release_notes = result
+            dialog = ReleaseNotesDialog(version, release_notes)
+            dialog.exec()
+
     def __init__(
         self,
         parent: PySide6.QtWidgets.QWidget = None,
         state: ViewerState = None,
+        check_updates=False,
         **kwargs,
     ) -> None:
         super().__init__(parent)
@@ -131,18 +157,15 @@ class MdiView(QMainWindow):
             QSettings.Format.IniFormat, QSettings.Scope.UserScope, "spikespy"
         )
 
-        self.window_options = {
-            # 'TraceAnnotation': TraceView,
-            "MultiTrace": MultiTraceView,
-            "UnitView": UnitView,
-            "SpikeGroupTable": SpikeGroupTableView,
-            "SingleTraceView": SingleTraceView,
-            "Settings": NeoSettingsView,
-            "TrackingView": TrackingView,
-            "Data": QNeoSelector,
-            "Events": EventView,
-        }
+        self.window_options = window_options
         self.cur_windows = []
+
+        self.version_check_thread = VersionCheckThread()
+        self.version_check_thread.worker.result.connect(
+            self.handle_version_check_result
+        )
+        if check_updates:
+            self.version_check_thread.start()
 
         from importlib.metadata import version as get_version
 
@@ -150,6 +173,7 @@ class MdiView(QMainWindow):
         self.setWindowTitle(f"SpikeSpy - {version}")
         self.state = state or ViewerState(**kwargs)
         self.loadFile.connect(self.state.loadFile)
+        self.loadFile.connect(self.updateRecents)
         self.state.onLoadNewFile.connect(
             lambda self=self: self.setWindowTitle(
                 f"SpikeSpy ({version}) - {Path(self.state.title).name}"
@@ -179,8 +203,9 @@ class MdiView(QMainWindow):
 
         file_menu = self.menubar.addMenu("&File")
         file_menu.addAction(
-            QAction("Open", self, shortcut="Ctrl+O", triggered=lambda: self.open())
+            QAction("Open...", self, shortcut="Ctrl+O", triggered=lambda: self.open())
         )
+        self.recent_menu = file_menu.addMenu("Open Recent")
         file_menu.addAction(
             QAction(
                 "Save as nixio",
@@ -205,6 +230,11 @@ class MdiView(QMainWindow):
                 triggered=lambda: self.import_csv(),
             )
         )
+
+        self.updateRecents(None, None)
+
+        self.settings_file.endArray()
+
         edit_menu = self.menubar.addMenu("&Edit")
         edit_menu.addAction(
             QAction(
@@ -219,13 +249,19 @@ class MdiView(QMainWindow):
         )
 
         help_menu = self.menubar.addMenu("Help")
-        help_menu.addAction("check for updates")
 
         def showInfo():
             info = InfoDialog()
             info.exec()
 
         help_menu.addAction(QAction("About", self, triggered=showInfo))
+        help_menu.addAction(
+            QAction(
+                "Check for updates",
+                self,
+                triggered=lambda: self.version_check_thread.start(),
+            )
+        )
 
         # key shortcuts
         self.profiler = cProfile.Profile()
@@ -273,19 +309,16 @@ class MdiView(QMainWindow):
 
         self.move_mode = "snap"
 
-        def move(dist=1):
+        def move(dist=1, mode=None):
             cur_point = (
                 self.state.spike_groups[self.state.cur_spike_group].idx_arr[
                     self.state.stimno
                 ]
             )[0]
-            if self.move_mode == "snap":
-                from scipy.signal import find_peaks
-
-                dpts = self.state.get_erp()[self.state.stimno]
-                pts, _ = find_peaks(dpts)
-                pts_down, _ = find_peaks(-1 * dpts)
-                pts = np.sort(np.hstack([pts, pts_down]).flatten())
+            if mode is None:
+                mode = self.move_mode
+            if mode == "snap":
+                pts = self.state.get_peaks()[self.state.stimno]
                 i = pts.searchsorted(cur_point)
 
                 if dist > 0 and pts[i] != cur_point:
@@ -335,7 +368,10 @@ class MdiView(QMainWindow):
                     for x in range(self.state.stimno - 1, -1, -1)
                     if sg[x] is not None
                 )
-                self.state.setUnit(new_x)
+                # localise to nearest peak
+                cur_erp = self.state.get_erp()[self.state.stimno]
+                offset = np.argmax(cur_erp[new_x - 300 : new_x + 300]) - 300
+                self.state.setUnit(new_x + offset)
             except StopIteration:
                 pass
 
@@ -346,23 +382,70 @@ class MdiView(QMainWindow):
 
     def export_csv(self):
         save_filename = QFileDialog.getSaveFileName(self, "Export")[0]
-        from csv import writer
 
         if save_filename is None:
             return
-        with open(save_filename, "w") as f:
-            w = writer(f)
-            # self.state.segment
-            w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
-            for i, sg in enumerate(self.state.spike_groups):
-                for timestamp in sg.event:
-                    stim_no = self.state.event_signal.searchsorted(timestamp) - 1
-                    latency = (timestamp - self.state.event_signal[stim_no]).rescale(
-                        pq.ms
-                    )
-                    w.writerow(
-                        [f"{i}", stim_no, latency.base, timestamp.rescale(pq.ms).base]
-                    )
+        units = [x.event for x in self.state.spike_groups]
+        export_csv(save_filename, stim_evt=self.state.event_signal, unit_evts=units)
+
+    def updateRecents(self, filename, type):
+
+        if filename is not None:
+            to_save = [filename]
+            for i in range(self.settings_file.beginReadArray("Recent")):
+                self.settings_file.setArrayIndex(i)
+                prevVal = self.settings_file.value("filename")
+                if prevVal == filename:
+                    continue
+                to_save.append(prevVal)
+            self.settings_file.endArray()
+
+            self.settings_file.beginWriteArray("Recent")
+            for i in range(len(to_save)):
+                self.settings_file.setArrayIndex(i)
+                self.settings_file.setValue("filename", to_save[i])
+            self.settings_file.endArray()
+
+        self.recent_menu.clear()
+        for i in range(self.settings_file.beginReadArray("Recent")):
+            self.settings_file.setArrayIndex(i)
+            fname = self.settings_file.value("filename")
+            self.recent_menu.addAction(
+                QAction(
+                    Path(fname).name,
+                    self,
+                    triggered=lambda n, fname=fname: self.loadFile.emit(
+                        fname, "h5"
+                    ),  # currently assumes h5
+                )
+            )
+
+    def export_npz(
+        self,
+    ):  # save a condensed analysis package. - should also be able to load these in spikespy
+        from .processing import create_erp_signals
+
+        # erp = self.state.get_erp()
+        timestamps = self.state.event_signal
+        details = {
+            "sampling_rate": self.state.sampling_rate,
+            "unit": "mV",
+            "window_size": self.state.window_size,
+            "original_data": "",  # TODO: get ref. to original file if possible
+        }
+
+        units = self.state.spike_groups
+        units_erps = [
+            create_erp_signals(
+                self.state.analog_signal, e.event, -0.5 * pq.ms, 1 * pq.ms
+            )
+            for e in units
+        ]
+        other_events = self.state.segment.events
+        signal_erps = [
+            create_erp_signals(e, timestamps, -0.5 * pq.ms, 1 * pq.ms)
+            for e in self.state.segment.analogsignals
+        ]
 
     def import_csv(self):
         open_filename = QFileDialog.getOpenFileName(self, "csv import")[0]
@@ -413,6 +496,7 @@ class MdiView(QMainWindow):
         w2 = QtAds.CDockWidget(name)
         w2.setWidget(w)
         w2.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, True)
+        w2.setFeature(QtAds.CDockWidget.DockWidgetForceCloseWithArea, True)
         self.dock_manager.addDockWidget(QtAds.NoDockWidgetArea, w2)
         self.cur_windows.append(w2)
         w2.show()
@@ -433,30 +517,26 @@ class MdiView(QMainWindow):
         """
         triggered on file->save
         """
-        fname = QFileDialog.getSaveFileName(self, "Save as", filter=".h5")[0]
+        fname = QFileDialog.getSaveFileName(self, "Save as", filter="*.h5 *.nwb")[0]
         # s = neo.Segment()
         if fname == "":
             return
 
-        s = self.state.segment or neo.Segment()
+        if self.state.segment is None:
+            s = neo.Segment()
 
+            s.events.append(self.state.event_signal)
+            s.analogsignals.append(self.state.analog_signal)
+        else:
+            s = self.state.segment
         save_file(
             fname,
             self.state.spike_groups,
             s,
-            event_signal=self.state.event_signal,
-            signal_chan=self.state.analog_signal,
         )
 
 
-def save_file(
-    filename,
-    spike_groups,
-    data=None,
-    metadata=None,
-    event_signal=None,
-    signal_chan=None,
-):
+def save_file(filename, spike_groups, data: neo.Segment = None, metadata=None):
     """
     Saves a file containing the spike groups
     """
@@ -466,31 +546,19 @@ def save_file(
             "date": datetime.now(),
         }
 
-    def create_event_signals():
-        events = []
+    # TODO: we could try just updating the events in an already existing h5
+    if filename is None:
 
-        # 1. create timestamps from them
-        for i, sg in enumerate(spike_groups):
-            ts = []
-            for e, s in zip(event_signal, sg.idx_arr):
-                if s is None:
-                    continue
-                s_in_sec = s[0] / signal_chan.sampling_rate
-                ts.append(e + s_in_sec)
-            events.append(
-                neo.Event(
-                    np.array(ts),
-                    name=f"unit_{i}",
-                    annotations=metadata,
-                    units="s",
-                )
-            )  # TODO: add more details about the events
-
-        return events
-
-    from copy import deepcopy
+        # check if data is an opened file in rw
+        # check if analogsignals are in file (by nix_name), if not either add of fail.
+        # check if events are in file (by nix_name, and data)
+        # remove changed events, add new ones
+        pass
+    blk = neo.Block(name="main")
 
     if data is not None:
+        from copy import deepcopy
+
         data2 = deepcopy(data)
 
         # remove all 'nix_names' which prevent saving the file
@@ -498,21 +566,39 @@ def save_file(
             if "nix_name" in x.annotations:
                 del x.annotations["nix_name"]
 
-        data2.analogsignals = [x.rescale("mV") for x in data2.analogsignals]
+        # extract any multianalogsignals into separate segment
+        for x in data2.analogsignals:
+            if isinstance(x, MultiAnalogSignal):
+                data2.analogsignals.remove(x)
+                new_seg = neo.Segment("ERP")
+                new_seg.analogsignals = x.signals
+                blk.segments.append(new_seg)
+
+        # data2.analogsignals = [x.rescale("mV") for x in data2.analogsignals]
 
         # remove previous unit annotations
-        data2.events = [x for x in data2.events if not x.name.startswith("unit_")]
+        data2.events = [
+            x
+            for x in data2.events
+            if not x.name.startswith("unit") and x.annotations.get("type") != "unit"
+        ]
     else:
         data2 = neo.Segment()
 
-    for x in create_event_signals():
-        data2.events.append(x)
+    for x in spike_groups:
+        x.event.annotate(**metadata)
+        data2.events.append(x.event)
 
-    blk = neo.Block(name="main")
     blk.segments.append(data2)
+    data2.block = blk
     if Path(filename).exists():
-        Path(filename).unlink()
-    n = NixIO(filename, mode="rw")
+        Path(filename).unlink()  # should probably do a user check here...
+    blk.annotations["session_start_time"] = data2.annotations.get(
+        "session_start_time", datetime.now()
+    )
+    output_formats = {"h5": NixIO, "nwb": neo.NWBIO}
+    export_class = output_formats[filename.split(".")[-1]]
+    n = export_class(filename, mode="rw")
     n.write_block(blk)
     n.close()
 
@@ -555,6 +641,22 @@ def run():
 from importlib.metadata import version, metadata, packages_distributions
 
 
+def run_spikespy(viewerState):
+    app = QApplication(sys.argv)
+    icon_path = Path(sys.modules[__name__].__file__).parent.joinpath("ui/icon.svg")
+    app.setWindowIcon(QIcon(QPixmap(str(icon_path))))
+    # data, signal_chan, event_signal, spike_groups = load_file(
+    # )
+    # w = TraceView(
+    #     analog_signal=signal_chan, event_signal=event_signal, spike_groups=spike_groups
+    # )
+    w = MdiView(state=viewerState)
+    w.showMaximized()
+    app.exec()
+
+    # w = SpikeGroupView()
+
+
 class InfoDialog(QDialog):
     # show license info and about
 
@@ -587,6 +689,30 @@ class InfoDialog(QDialog):
 
             out += "\n\n"
         return out
+
+
+def export_csv(save_filename, unit_evts, stim_evt):
+    with open(save_filename, "w") as f:
+        w = writer(f)
+        # self.state.segment
+        w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
+        for i, sg in enumerate(unit_evts):
+            nom = sg.name
+            if nom is None or nom == "":
+                nom = f"unit_{i}"
+            for timestamp in sg:
+                stim_no = stim_evt.searchsorted(timestamp) - 1
+                latency = (timestamp - stim_evt[stim_no]).rescale(pq.ms)
+
+                w.writerow([nom, stim_no, latency.base, timestamp.rescale(pq.ms).base])
+
+
+def register_plugin(plugin_name, plugin_class):
+    suggestors = []
+    if isinstance(plugin_class, UnitSuggestor):
+        suggestors[plugin_name] = plugin_class
+    else:
+        window_options[plugin_name] = plugin_class
 
 
 if __name__ == "__main__":
