@@ -67,9 +67,9 @@ class CachedAxesImage(AxesImage):
             y0 = clip2.y0 #self._cached_clip.ymin- transformed_bbox.ymin
             return self._cached_image[0],x0,y0, None# self._cached_image[3]
 
-        clip2 = clip.expanded(2, 2)
+        clip2 = clip.expanded(2, 2) # 2x the width and height of the window.
         # Cache the new larger cut of the data
-        fig = self.get_figure(root=True)
+        fig = self.get_figure()
         fac = renderer.dpi/fig.dpi
         # hack for ax if there are too many points is too big do a rolling max interpolation on X axis
         A = self._A.copy()
@@ -104,7 +104,7 @@ class CachedAxesImage(AxesImage):
         self._cached_magnification = magnification
         self._cached_lims = (current_xlim, current_ylim)
         self._cached_clim = current_clim
-
+        print("update cached image")
         # print(f"ORIGINAL: transformed_bbox:{transformed_bbox.extents}; cached_clip:{self._cached_clip.extents};  x0:{self._cached_clip.x0}; y0:{self._cached_clip.y0}")
         # print(f"ORIGINAL: clip orignal : {self._cached_clip.transformed(trans.inverted()).extents};")
 

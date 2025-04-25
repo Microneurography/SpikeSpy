@@ -43,14 +43,14 @@ class threshold_suggestor(UnitSuggestor):
     update_on_unit_group_change = False
     def get_settings(self):
         settings = super().get_settings()
-        settings['threshold'] = 
+        settings['threshold'] = None
 
     def suggest(self):
         settings = self.get_settings()
         asig = self.state.analog_signal
         
         if settings['threshold'] is None:
-            threshold = 
+            threshold = None
             threshold = np.std(asig) * settings.get('zscore_threhsold',5)
         
         threshold_crossings = asig>threshold

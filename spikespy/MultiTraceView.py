@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 import matplotlib
 import matplotlib.axes
+from matplotlib.collections import PatchCollection
 import matplotlib.style as mplstyle
 import numpy as np
 import PySide6
@@ -748,12 +749,12 @@ class MultiTraceView(QMainWindow):
         if self.points_spikegroups is None:
             pass  # TODO optimisation of setting x_data rather than replotting
         else:
-            for x in self.points_spikegroups:
-                try:
+            try:
+                for x in self.points_spikegroups:
                     x.remove()
-                except:
-                    pass
-        self.points_spikegroups = []
+            except:
+                pass
+        points_spikegroups = []
 
         def plot(sgidx, **kwargs):
             sg = self.state.getUnitGroup(sgidx)
@@ -765,30 +766,40 @@ class MultiTraceView(QMainWindow):
                 # self.view.draw_idle()
                 return
             #scat = self.ax.scatter(points[:, 0], points[:, 1], s=10, **kwargs)
+            points_spikegroups = []
             for point in points:
                 rect = matplotlib.patches.Rectangle(
                     (point[0] - 5, point[1] ), 10, 1, **kwargs
                 )
-                self.ax.add_patch(rect)
-                self.points_spikegroups.append(rect)
+
+                points_spikegroups.append(rect)
+            
             #scat.set_animated(True)
             #self.ax.draw_artist(scat)
-            return None
+            points_spikegroups = PatchCollection(points_spikegroups, **kwargs)
+            self.ax.add_collection(points_spikegroups)
+            return points_spikegroups
 
         # include other units
         from matplotlib.cm import get_cmap
 
+        points_spikegroups = []
         colors = get_cmap("Set2").colors
         if self.includeAllUnitsCheckBox.isChecked():
             for i, x in enumerate(self.state.spike_groups):
                 if i == self.state.cur_spike_group:
                     continue
                 artists = plot(i, color=colors[i % len(colors)])
-                self.points_spikegroups.append(artists)
+                points_spikegroups.append(artists)
+                
         # bg = self.
         if self.includeUnitCheckbox.isChecked():
             artists = plot(self.state.cur_spike_group, color="red", alpha=0.6 if self.mode=="heatmap" else 1)
-            self.points_spikegroups.append(artists)
+            points_spikegroups.append(artists)
+        self.points_spikegroups = points_spikegroups
+
+
+
         return self.points_spikegroups
 
     # @qsignal_throttle_wrapper(interval=33)
@@ -812,7 +823,7 @@ class MultiTraceView(QMainWindow):
             #self.pg_selector.draw()
 
         self.view.update()
-        return o + o2
+        #return  o2
         # try:
         #     self.ax.redraw_in_frame()
         # except:
