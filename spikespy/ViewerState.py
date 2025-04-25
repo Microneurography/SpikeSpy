@@ -336,7 +336,13 @@ class ViewerState(QObject):
 
     @Slot()
     def addUnitGroup(self):
-        self.spike_groups.append(tracked_neuron_unit(event=Event()))
+        evt = Event()
+        evt.name = f"unit_{len(self.spike_groups)}"
+        evt.annotations["type"] = "unit"
+        evt.annotations["unit"] = len(self.spike_groups)
+        evt.annotations["notes"] = ""
+        evt.annotations["fibre_type"] = ""
+        self.spike_groups.append(tracked_neuron_unit(event=evt))
         self.update_idx_arrs()
         self.onUnitGroupChange.emit()
 

@@ -585,8 +585,9 @@ def save_file(filename, spike_groups, data: neo.Segment = None, metadata=None):
     else:
         data2 = neo.Segment()
 
-    for x in spike_groups:
+    for i,x in enumerate(spike_groups):
         x.event.annotate(**metadata)
+        x.event.name = x.event.name or f"unit_{i}"
         data2.events.append(x.event)
 
     blk.segments.append(data2)
