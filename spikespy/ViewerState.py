@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QMessageBox,
 )
+from functools import lru_cache
 from neo.core.objectlist import ObjectList
 
 from .APTrack_experiment_import import (
@@ -413,7 +414,7 @@ class ViewerState(QObject):
         # )
         return erp
 
-    from functools import lru_cache
+   
 
     _peaks = None
 
@@ -436,7 +437,13 @@ class ViewerState(QObject):
         self.window_size = window_size * pq.ms
         self._get_erp.cache_clear()
         self.onLoadNewFile.emit()
-
+    
+    def get_unit_suggestions(self):
+        # This will return a list of event suggestions provided by all the activated UnitSuggestion providers
+        # This allows for custom algorithms to be implemented
+        # The first one in the list will be the selected default.
+        pass
+    
     def set_data(
         self,
         analog_signal=None,

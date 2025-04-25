@@ -67,9 +67,9 @@ from .UnitView import UnitView
 from .ViewerState import ViewerState, prompt_for_neo_file, tracked_neuron_unit
 from .EventView import EventView
 from .MultiTraceFixedView import MultiTraceFixedView
-
+from .UnitSuggestor import UnitSuggestor
 import PySide6QtAds as QtAds
-
+from typing import Dict
 mplstyle.use("fast")
 
 window_options = {
@@ -84,7 +84,8 @@ window_options = {
     "Data": QNeoSelector,
     "Events": EventView,
 }
-
+suggestors:Dict[str,UnitSuggestor] = {
+}
 
 class MdiView(QMainWindow):
     # signals
@@ -707,7 +708,11 @@ def export_csv(save_filename, unit_evts, stim_evt):
 
 
 def register_plugin(plugin_name, plugin_class):
-    window_options[plugin_name] = plugin_class
+    suggestors = []
+    if isinstance(plugin_class, UnitSuggestor):
+        suggestors[plugin_name] = plugin_class
+    else:
+        window_options[plugin_name] = plugin_class
 
 
 if __name__ == "__main__":
