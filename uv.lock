@@ -1424,7 +1424,7 @@ wheels = [
 
 [[package]]
 name = "spikespy"
-version = "0.1.12"
+version = "0.1.13"
 source = { editable = "." }
 dependencies = [
     { name = "h5py" },
