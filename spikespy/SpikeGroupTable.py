@@ -60,7 +60,7 @@ class SpikeGroupTableView(QWidget):
         self.setLayout(vlayout)
 
         self.tbl.selectionModel().selectionChanged.connect(self.set_selection)
-        self.tbl.setItemDelegateForColumn(4, ComboBoxDelegate(self))
+        self.tbl.setItemDelegateForColumn(4, ComboBoxDelegate(self, ["cm","ch","cmh","cmihi","cmih"]))
 
     @Slot()
     def set_selection(self, x):
@@ -77,9 +77,11 @@ class SpikeGroupTableView2(QTableView):
 
 
 class ComboBoxDelegate(QStyledItemDelegate):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, items: List[str] = None):
         super(ComboBoxDelegate, self).__init__(parent)
-        self.items = ["CMh", "CMi", "unknown"]  # Example items for the dropdown
+        if items is None:
+            items = ["Cm", "Cmh", "Cmih", "Cmihi", "Ch"]
+        self.items = items
 
     def createEditor(self, parent, option, index):
         combo = QComboBox(parent)
@@ -100,10 +102,12 @@ class SpikeGroupTableModel(QAbstractTableModel):
         """
         spikegroups_func is a functino which returns the spike groups
         """
-        QAbstractTableModel.__init__(self)
+        QAbstractTableModel.__init__(self,)
         self.spikegroups_func = spikegroups_func
         self.spikegroups = self.spikegroups_func()
-        self.headers = ["SpikeID", "start", "end", "notes", "fibre class"]
+        self.headers = ["SpikeID", "start", "end"]
+        self.annotations_to_show = {'notes': "notes",  "fibre class":"fibre_type", "thermal":"thermal_response","mechanical":'mechanical_response'}
+        self.headers += list(self.annotations_to_show.keys())
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.spikegroups_func() or [])
@@ -143,10 +147,13 @@ class SpikeGroupTableModel(QAbstractTableModel):
                 if sg.get_window() is None:
                     return ""
                 return sg.get_window()[column - 1]
-            elif column == 3:  # notes
-                return sg.event.annotations.get("notes")
-            elif column == 4:  # fibre_type
-                return sg.event.annotations.get("fibre_type")
+            elif column >=3:
+                return sg.event.annotations.get(self.annotations_to_show[self.headers[column]])
+
+            # elif column == 3:  # notes
+            #     return sg.event.annotations.get("notes")
+            # elif column == 4:  # fibre_type
+            #     return sg.event.annotations.get("fibre_type")
             else:
                 return ""
         elif role == Qt.BackgroundRole:
@@ -162,20 +169,15 @@ class SpikeGroupTableModel(QAbstractTableModel):
             column = index.column()
             row = index.row()
             sg = self.spikegroups_func()[row]
-            if column == 3:  # notes
-                sg.event.annotations["notes"] = value
+            if column>=3:
+                sg.event.annotations[self.annotations_to_show[self.headers[column]]] = value
                 self.dataChanged.emit(index, index)
                 return True
 
-            if column == 4:  # fibre class
-                sg.event.annotations["fibre_type"] = value
-                # sg.fibre_type = value
-                self.dataChanged.emit(index, index)
-                return True
         return False
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
-        if index.column() in [3, 4]:  # fibre class
+        if index.column() >=3:  # fibre class
             return Qt.ItemIsEditable | Qt.ItemIsEnabled
         return Qt.ItemIsEnabled
 

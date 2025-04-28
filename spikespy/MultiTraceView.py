@@ -376,7 +376,7 @@ class MultiTraceView(QMainWindow):
         self.pg_selector = LineSelector(
             self.ax,
             lambda *args: None,
-            props=dict(color="purple", linestyle="-", linewidth=2, alpha=0.5),
+            props=dict(color="purple", linestyle="none", linewidth=2, alpha=0.5),
             # useblit=True,
         )  # useblit does not work (for unknown reasons)
         self.pg_selector.set_active(False)
@@ -397,6 +397,9 @@ class MultiTraceView(QMainWindow):
         self.dialogPolySelect.onSubmit.connect(self.polySelect)
         self.dialogPolySelect.finished.connect(
             lambda *args: self.toggle_polySelector(False)
+        )
+        self.dialogPolySelect.changeSelection.connect(
+            lambda x,y: self.pg_selector.set_w(int(self.state.analog_signal.sampling_rate * x / 1000))
         )
 
     def get_settings(self):
@@ -473,12 +476,14 @@ class MultiTraceView(QMainWindow):
             self.pg_selector._selection_completed = False
             self.pg_selector.set_visible(True)
             self.dialogPolySelect.show()
+            self.dialogPolySelect.change()
             # self.dialogPolySelect.activate()
         else:
             self.pg_selector._selection_completed = True
             self.pg_selector.clear()
             self.pg_selector._xys = [(0, 0)]  # TODO: move to clear
             self.dialogPolySelect.hide()
+            self.pg_selector.set_visible(False)
 
     def keyPressEvent(self, e):
 
@@ -782,6 +787,8 @@ class MultiTraceView(QMainWindow):
 
         # include other units
         from matplotlib.cm import get_cmap
+        from matplotlib.patches import Polygon
+        import numpy as np
 
         points_spikegroups = []
         colors = get_cmap("Set2").colors
@@ -861,9 +868,71 @@ class MultiTraceView(QMainWindow):
         super().__del__()
 
 
+import matplotlib.patches
 class LineSelector(PolygonSelector):
     # self.outerlines = None
     # def calculate_hits
+    def __init__(self, *args, w=1000, **kwargs): 
+        self._selection_window = matplotlib.patches.Polygon(
+            [(0, 0)], closed=False, edgecolor="purple", facecolor="none"
+        )
+        self.w = w
+ 
+        super().__init__(*args, **kwargs)
+        self.ax.add_patch(self._selection_window)
+    
+    def set_w(self, w):
+        self.w = w
+        self._draw_polygon()
+    @property   
+    def artists(self):
+        others = super().artists
+        return  others + (self._selection_window,)
+
+    def set_visible(self, visible):
+        return super().set_visible(visible)
+    def clear(self):
+        super().clear()
+        self._selection_window.set_visible(False)
+        self._selection_window.remove()
+        self._selection_window = matplotlib.patches.Polygon(
+            [(0, 0)], closed=False, edgecolor="purple", facecolor="none"
+        )
+        self.ax.add_patch(self._selection_window)
+
+    def _draw_polygon_without_update(self):
+        super()._draw_polygon_without_update()
+        if len(self._xys) < 2:
+            return
+
+        # Create a polygon with width "w" around the line described by self._xys
+        w = self.w  # You can adjust this width as needed
+        xys = np.array(self._xys)
+        if len(xys) < 2:
+            return
+
+        
+        # #Calculate the perpendicular offsets for the polygon
+        # dx = np.diff(xys[:, 0])
+        # dy = np.diff(xys[:, 1])
+        # length = np.sqrt(dx**2 + dy**2)
+        # nx = -dy / length  # Normalized perpendicular vector (x-component)
+        # ny = dx / length   # Normalized perpendicular vector (y-component)
+
+        # Create the upper and lower edges of the polygon
+        upper = xys + np.array([w/2,0])
+        lower = xys - np.array([w/2,0]) 
+        lower = lower[::-1]  # Reverse the lower edge to close the polygon
+
+        # Combine the edges to form the polygon
+        poly_points = np.vstack([upper, lower, upper[0]]) 
+        if self._selection_window is None:
+            self._selection_window = matplotlib.patches.Polygon(
+                poly_points, closed=True, edgecolor="purple", alpha=0.5
+            )
+
+
+        self._selection_window.set_xy(poly_points)
 
     def _release(self, event):
         """Button release event handler."""
@@ -960,7 +1029,7 @@ class DialogPolySelect(QDialog):
 
     def change(self):
         self.changeSelection.emit(
-            self.window_size_input.value, self.minimumThreshold.value
+            self.window_size_input.value(), self.minimumThreshold.value()
         )
 
     def getValues(self):
