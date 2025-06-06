@@ -289,7 +289,7 @@ class MultiTraceView(QMainWindow):
         self.upperSpinBox.setDecimals(2)
         self.upperSpinBox.setSingleStep(0.1)
         self.upperSpinBox.setValue(2)
-        
+
         self.lowerSpinBox.valueChanged.connect(self.upperSpinBox.setMinimum)
         self.upperSpinBox.valueChanged.connect(self.lowerSpinBox.setMaximum)
         self.lowerSpinBox.setValue(0.5)
@@ -389,10 +389,10 @@ class MultiTraceView(QMainWindow):
         
 
         # @qsignal_throttle_wrapper(interval=33)
-        def draw_evt(evt):
-            with self.fig.canvas.callbacks.blocked():
-                # self.blit()
-                self.render()
+        # def draw_evt(evt):
+        #     with self.fig.canvas.callbacks.blocked():
+        #         # self.blit()
+        #         self.render()
         
         #self.fig.canvas.mpl_connect("draw_event", draw_evt)
         # self.ax.callbacks.connect("xlim_changed", draw_evt)
@@ -759,11 +759,12 @@ class MultiTraceView(QMainWindow):
         if self.points_spikegroups is None:
             pass  # TODO optimisation of setting x_data rather than replotting
         else:
-            try:
-                for x in self.points_spikegroups:
+            #try:
+            for x in self.points_spikegroups:
+                if x is not None:
                     x.remove()
-            except:
-                pass
+            #except:
+            #    pass
         points_spikegroups = []
 
         def plot(sgidx, **kwargs):

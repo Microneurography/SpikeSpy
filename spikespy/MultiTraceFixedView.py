@@ -93,7 +93,10 @@ class MultiTraceFixedView(QMatplotlib):
 
     def unsetCons(self):
         for con in self.connections:
-            self.state.disconnect(con)
+            try:
+                self.state.disconnect(con)
+            except:
+                pass
         self.connections = []
 
     def __del__(self):
