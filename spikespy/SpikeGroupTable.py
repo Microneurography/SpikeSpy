@@ -44,36 +44,88 @@ class SpikeGroupTableView(QWidget):
         self.tbl = SpikeGroupTableView2(self)
         self.tbl.setModel(self.spike_tablemodel)
         self.state = state
-        state.onUnitChange.connect(self.spike_tablemodel.update)
-        state.onUnitGroupChange.connect(self.spike_tablemodel.update)
-        state.onLoadNewFile.connect(self.spike_tablemodel.update)
-        self.tbl.setSelectionBehavior(QAbstractItemView.SelectRows)
+        state.onUnitChange.connect(self.update)
+        state.onUnitGroupChange.connect(self.update)
+        state.onLoadNewFile.connect(self.update)
+        
+        self.tbl.setSelectionBehavior(QTableView.SelectRows)
+        #self.tbl.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.tbl.setStyleSheet("QTableView::item:selected { background: #a0c4ff; }")
 
         self.addButton = QPushButton("+")
         self.addButton.clicked.connect(self.state.addUnitGroup)
         self.removeButton = QPushButton("-")
-        self.removeButton.clicked.connect(self.state.removeUnitGroup)
+        self.removeButton.clicked.connect(self.remove_selected_row)
 
         vlayout = QVBoxLayout()
         vlayout.addWidget(self.tbl)
         vlayout.addWidget(self.addButton)
+        vlayout.addWidget(self.removeButton)
         self.setLayout(vlayout)
 
         self.tbl.selectionModel().selectionChanged.connect(self.set_selection)
         self.tbl.setItemDelegateForColumn(4, ComboBoxDelegate(self, ["cm","ch","cmh","cmihi","cmih"]))
 
+        self.addButton.clicked.disconnect()
+        self.addButton.clicked.connect(self.add_row_and_select)
+        self.spike_tablemodel.dataChanged.connect(self.state.onUnitGroupChange)
+        self.update()
+
+    def update(self):
+        self.spike_tablemodel.update()
+        # Ensure the correct row is selected as per state
+        current_group = self.state.getUnitGroup() 
+        if current_group is not None:
+            # Find the row corresponding to the current unit group
+            for row in range(self.tbl.model().rowCount()):
+                sg = self.tbl.model().data(self.tbl.model().index(row, 0), role="SPIKEGROUP_ROLE")
+                if sg == current_group:
+                    self.tbl.selectionModel().blockSignals(True)
+                    self.tbl.selectRow(row)
+                    self.tbl.selectionModel().blockSignals(False)
+                    break
+        # self.tbl.selectionModel().disconnect(self.set_selection)
+        # self.tbl.selectionModel().setCurrentIndex(
+        #     ,
+        #     QItemSelectionModel.SelectCurrent,
+        # )
+
     @Slot()
     def set_selection(self, x):
         y = x.toList()
         if len(y) > 0:
-            sg = x.first().top()
+            row = y[0].top()
+            self.state.setUnitGroup(row)
         else:
-            sg = 0
-        self.state.setUnitGroup(sg)
+            self.state.setUnitGroup(0)
+
+    def remove_selected_row(self):
+        selection = self.tbl.selectionModel().selectedRows()
+        if selection:
+            row = selection[0].row()
+            sg = self.tbl.model().data(self.tbl.model().index(row, 0), role="SPIKEGROUP_ROLE")
+
+            self.state.removeUnitGroup(sg)
+     
+
+    def add_row_and_select(self):
+        self.state.addUnitGroup()
+        # Select the last row after adding
+        row_count = self.tbl.model().rowCount()
+        if row_count > 0:
+            self.tbl.selectRow(row_count - 1)
 
 
 class SpikeGroupTableView2(QTableView):
-    pass
+    def mousePressEvent(self, event):
+        index = self.indexAt(event.pos())
+        if index.isValid() and index.column() == 0:
+            self.selectRow(index.row())
+            # Optionally emit selectionChanged if you want to trigger logic
+        else:
+            # Ignore selection for other columns
+            event.ignore()
+        super().mousePressEvent(event)
 
 
 class ComboBoxDelegate(QStyledItemDelegate):
@@ -85,12 +137,15 @@ class ComboBoxDelegate(QStyledItemDelegate):
 
     def createEditor(self, parent, option, index):
         combo = QComboBox(parent)
+        # Set the default text to match the current data
         combo.setEditable(True)
         combo.addItems(self.items)
+
         return combo
 
+
     def setEditorData(self, editor, index):
-        value = index.model().data(index, Qt.EditRole)
+        value = index.model().data(index, Qt.DisplayRole)
         editor.setCurrentText(value)
 
     def setModelData(self, editor, model, index):
@@ -140,7 +195,7 @@ class SpikeGroupTableModel(QAbstractTableModel):
         column = index.column()
         row = index.row()
         sg = self.spikegroups_func()[row]
-        if role == Qt.DisplayRole:
+        if role == Qt.DisplayRole or role == Qt.EditRole:
             if column == 0:  # SpikeID
                 return sg.event.name or row
             elif column in (1, 2):  # start/end
@@ -156,8 +211,10 @@ class SpikeGroupTableModel(QAbstractTableModel):
             #     return sg.event.annotations.get("fibre_type")
             else:
                 return ""
-        elif role == Qt.BackgroundRole:
-            return QColor(Qt.white)
+        elif role == "SPIKEGROUP_ROLE":
+            return sg
+        #elif role == Qt.BackgroundRole:
+            #return QColor(Qt.white)
 
     def setData(
         self,
@@ -172,21 +229,25 @@ class SpikeGroupTableModel(QAbstractTableModel):
             if column>=3:
                 sg.event.annotations[self.annotations_to_show[self.headers[column]]] = value
                 self.dataChanged.emit(index, index)
+                
                 return True
 
         return False
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
-        if index.column() >=3:  # fibre class
-            return Qt.ItemIsEditable | Qt.ItemIsEnabled
-        return Qt.ItemIsEnabled
+        flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        if index.column() >= 3:  # fibre class
+            flags |= Qt.ItemIsEditable
+        return flags
+
+
 
 
 if __name__ == "__main__":
 
     app = QApplication([])
     state = ViewerState()
-    state.loadFile(r"/Users/xs19785/Documents/Open Ephys/06-dec.h5")
+    state.loadFile(r"data/test2.h5")
     # evt = neo.Event(np.array([100]) * pq.s)
     # evt.array_annotate(info=["something"], number=[5])
     view = SpikeGroupTableView(None, state=state)

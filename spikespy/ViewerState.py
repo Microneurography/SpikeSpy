@@ -332,13 +332,26 @@ class ViewerState(QObject):
         self.cur_spike_group = 0
         self.set_data(analog_signal, event_signal, spike_groups=spike_groups)
 
-    def removeUnitGroup(self):
-        pass
+    def removeUnitGroup(self, unit):
+        spike_groups = self.spike_groups
+        self.spike_groups = [x for i, x in enumerate(spike_groups) if x.event.name != unit.event.name]
+        self.update_idx_arrs()
+        self.save_undo(
+            lambda: self.set_data(
+                spike_groups=spike_groups,
+            )
+        )
+        self.onUnitGroupChange.emit()
+
 
     @Slot()
     def addUnitGroup(self):
         evt = Event()
-        evt.name = f"unit_{len(self.spike_groups)}"
+        nom = f"unit"
+        x = len(self.spike_groups)
+        while(f"{nom}_{x}" in [sg.event.name for sg in self.spike_groups]):
+            x+= 1
+        evt.name =f"{nom}_{x}" 
         evt.annotations["type"] = "unit"
         evt.annotations["unit"] = len(self.spike_groups)
         evt.annotations["notes"] = ""
