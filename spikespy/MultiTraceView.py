@@ -278,16 +278,21 @@ class MultiTraceView(QMainWindow):
 
         self.addToolBar(self.toolbar)
         layout = QVBoxLayout()
-        self.lowerSpinBox = QSpinBox(self)
-        self.lowerSpinBox.setRange(0, 99)
+        self.lowerSpinBox = QDoubleSpinBox(self)
+        self.lowerSpinBox.setDecimals(2)
+        self.lowerSpinBox.setSingleStep(0.1)
+        self.lowerSpinBox.setRange(0, 10)
         self.lowerSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
 
-        self.upperSpinBox = QSpinBox(self)
-        self.upperSpinBox.setRange(0, 100)
-        self.upperSpinBox.setValue(10)
+        self.upperSpinBox = QDoubleSpinBox(self)
+        self.upperSpinBox.setRange(0, 10)
+        self.upperSpinBox.setDecimals(2)
+        self.upperSpinBox.setSingleStep(0.1)
+        self.upperSpinBox.setValue(2)
+        
         self.lowerSpinBox.valueChanged.connect(self.upperSpinBox.setMinimum)
         self.upperSpinBox.valueChanged.connect(self.lowerSpinBox.setMaximum)
-        self.lowerSpinBox.setValue(1)
+        self.lowerSpinBox.setValue(0.5)
         self.upperSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
 
         self.referneces = []
