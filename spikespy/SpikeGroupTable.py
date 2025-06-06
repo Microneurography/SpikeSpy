@@ -50,17 +50,31 @@ class SpikeGroupTableView(QWidget):
         
         self.tbl.setSelectionBehavior(QTableView.SelectRows)
         #self.tbl.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.tbl.setStyleSheet("QTableView::item:selected { background: #a0c4ff; }")
+        #self.tbl.setStyleSheet("QTableView::item:selected { background: #a0c4ff; }")
 
-        self.addButton = QPushButton("+")
+        # Use standard icons for add/remove if available
+        style = self.style()
+        add_icon = style.standardIcon(PySide6.QtWidgets.QStyle.SP_FileDialogNewFolder)
+        remove_icon = style.standardIcon(PySide6.QtWidgets.QStyle.SP_TrashIcon)
+
+        # Place add/remove buttons next to each other, aligned to the right, with standard add/delete icons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)  # Push buttons to the right
+        self.addButton = QPushButton()
+        self.addButton.setIcon(add_icon)
+        self.addButton.setToolTip("Add a new event/group")
         self.addButton.clicked.connect(self.state.addUnitGroup)
-        self.removeButton = QPushButton("-")
+        self.removeButton = QPushButton()
+        self.removeButton.setIcon(remove_icon)
+        self.removeButton.setToolTip("Delete the selected event/group")
         self.removeButton.clicked.connect(self.remove_selected_row)
+        button_layout.addWidget(self.removeButton)
+        button_layout.addWidget(self.addButton)
+        
 
         vlayout = QVBoxLayout()
         vlayout.addWidget(self.tbl)
-        vlayout.addWidget(self.addButton)
-        vlayout.addWidget(self.removeButton)
+        vlayout.addLayout(button_layout)
         self.setLayout(vlayout)
 
         self.tbl.selectionModel().selectionChanged.connect(self.set_selection)
@@ -79,7 +93,7 @@ class SpikeGroupTableView(QWidget):
             # Find the row corresponding to the current unit group
             for row in range(self.tbl.model().rowCount()):
                 sg = self.tbl.model().data(self.tbl.model().index(row, 0), role="SPIKEGROUP_ROLE")
-                if sg == current_group:
+                if sg.event.name == current_group.event.name:
                     self.tbl.selectionModel().blockSignals(True)
                     self.tbl.selectRow(row)
                     self.tbl.selectionModel().blockSignals(False)
@@ -117,15 +131,16 @@ class SpikeGroupTableView(QWidget):
 
 
 class SpikeGroupTableView2(QTableView):
-    def mousePressEvent(self, event):
-        index = self.indexAt(event.pos())
-        if index.isValid() and index.column() == 0:
-            self.selectRow(index.row())
-            # Optionally emit selectionChanged if you want to trigger logic
-        else:
-            # Ignore selection for other columns
-            event.ignore()
-        super().mousePressEvent(event)
+    pass
+    # def mousePressEvent(self, event):
+    #     index = self.indexAt(event.pos())
+    #     if index.isValid() and index.column() == 0:
+    #         self.selectRow(index.row())
+    #         # Optionally emit selectionChanged if you want to trigger logic
+    #     else:
+    #         # Ignore selection for other columns
+    #         event.ignore()
+    #     super().mousePressEvent(event)
 
 
 class ComboBoxDelegate(QStyledItemDelegate):
@@ -205,10 +220,6 @@ class SpikeGroupTableModel(QAbstractTableModel):
             elif column >=3:
                 return sg.event.annotations.get(self.annotations_to_show[self.headers[column]])
 
-            # elif column == 3:  # notes
-            #     return sg.event.annotations.get("notes")
-            # elif column == 4:  # fibre_type
-            #     return sg.event.annotations.get("fibre_type")
             else:
                 return ""
         elif role == "SPIKEGROUP_ROLE":
