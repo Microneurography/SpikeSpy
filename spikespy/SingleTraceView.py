@@ -506,8 +506,34 @@ class SingleTraceView(QMainWindow):
         self.state.setUnit(x)
 
     def keyPressEvent(self, e):
-        if e.key() == Qt.Key_N:
-            self.state.setUnit(self.closest_pos)
+        if e.key() == Qt.Key_N: # add a new spike where we last had one
+            # self.state.setUnit(self.closest_pos)
+            # look back
+            for i in range(5):
+                spike_ts = (
+                    self.state.getUnitGroup()
+                    .get_latencies([self.state.event_signal[self.state.stimno-i]])[0]
+                    .rescale("s")
+                )
+                if not (spike_ts == np.nan or spike_ts > self.state.window_size):
+                    break
+            
+            # look forward
+            if not (spike_ts == np.nan or spike_ts > self.state.window_size):
+                for i in range(5):
+                    spike_ts = (
+                        self.state.getUnitGroup()
+                        .get_latencies([self.state.event_signal[self.state.stimno+i]])[0]
+                        .rescale("s")
+                    )
+                    if not (spike_ts == np.nan or spike_ts > self.state.window_size):
+                        break
+
+            if spike_ts == np.nan:
+                spike_ts = self.closest_pos
+
+            self.state.setUnit(spike_ts)
+                                
         elif e.key() == Qt.Key_Z:
             # get current spike location
             spike_ts = (
