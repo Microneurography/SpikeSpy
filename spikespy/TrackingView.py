@@ -44,9 +44,10 @@ class TrackingView(QMainWindow):
         qsb_window_size = QDoubleSpinBox(self)
         qsb_window_size.setMinimumWidth(100)
         qsb_window_size.setMaximum(100)
-        qsb_window_size.setDecimals(0)
+        qsb_window_size.setDecimals(1)
         qsb_window_size.setMinimum(0)
         qsb_window_size.setValue(5)
+        qsb_window_size.setSingleStep(0.5)
         self.qsb_window_size = qsb_window_size
 
         layout.addRow(self.tr("window size (ms)"), qsb_window_size)
@@ -55,6 +56,9 @@ class TrackingView(QMainWindow):
         qsb_threshold.setMinimumWidth(100)
         qsb_threshold.setMaximum(1000000)
         qsb_threshold.setMinimum(-1000000)
+        qsb_threshold.setDecimals(4)
+        qsb_threshold.setValue(0.01)
+        qsb_threshold.setSingleStep(0.01)
 
         self.qsb_threshold = qsb_threshold
         try:

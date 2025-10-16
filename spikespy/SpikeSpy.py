@@ -295,11 +295,25 @@ class MdiView(QMainWindow):
             lambda: self.state.setStimNo(self.state.stimno + 1)
         )
 
+        self.shortcut_skip_next = QShortcut(
+            QKeySequence(Qt.Key_PageDown), self, context=Qt.ApplicationShortcut
+        )
+        self.shortcut_skip_next.activated.connect(
+            lambda: self.state.setStimNo(self.state.stimno + 5)
+        )
+
         self.shortcut_prev = QShortcut(
             QKeySequence(Qt.Key_Up), self, context=Qt.ApplicationShortcut
         )
         self.shortcut_prev.activated.connect(
             lambda: self.state.setStimNo(self.state.stimno - 1)
+        )
+
+        self.shortcut_skip_prev = QShortcut(
+            QKeySequence(Qt.Key_PageUp), self, context=Qt.ApplicationShortcut
+        )
+        self.shortcut_skip_prev.activated.connect(
+            lambda: self.state.setStimNo(self.state.stimno - 5)
         )
 
         self.shortcut_del = QShortcut(

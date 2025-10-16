@@ -580,7 +580,42 @@ class SingleTraceView(QMainWindow):
                 return
 
             self.state.setUnit(idx[closest_idx])
+        elif e.key() == Qt.Key_BracketLeft: # Zoom out
+            print("[ KEY")
+            # get current xlim & ylim
+            x_limits = [self.ax.get_xlim()[0],self.ax.get_xlim()[1]]
+            y_limits = [self.ax.get_ylim()[0],self.ax.get_ylim()[1]]
+            
+            # calculate new limits
+            midline = np.mean(x_limits)
+            new_x_limits = [midline-(midline-x_limits[0])*1.2,midline+(x_limits[1]-midline)*1.2]
+            
+            midline = np.mean(y_limits)
+            new_y_limits = [midline-(midline-y_limits[0])*1.2,midline+(y_limits[1]-midline)*1.2]
+            
+            # increase the lims to 120% 
+            self.ax.set_xlim(new_x_limits[0],new_x_limits[1])
+            self.ax.set_ylim(new_y_limits[0],new_y_limits[1])
 
+            self.fig.canvas.draw_idle()
+        elif e.key() == Qt.Key_BracketRight: # Zoom in
+            print("] KEY")
+            # get current xlim & ylim
+            x_limits = [self.ax.get_xlim()[0],self.ax.get_xlim()[1]]
+            y_limits = [self.ax.get_ylim()[0],self.ax.get_ylim()[1]]
+            
+            # calculate new limits
+            midline = np.mean(x_limits)
+            new_x_limits = [midline-(midline-x_limits[0])*.8,midline+(x_limits[1]-midline)*.8]
+            
+            midline = np.mean(y_limits)
+            new_y_limits = [midline-(midline-y_limits[0])*.8,midline+(y_limits[1]-midline)*.8]
+            
+            # deccrease the lims to 80% 
+            self.ax.set_xlim(new_x_limits[0],new_x_limits[1])
+            self.ax.set_ylim(new_y_limits[0],new_y_limits[1])
+
+            self.fig.canvas.draw_idle()
 
 if __name__ == "__main__":
 
