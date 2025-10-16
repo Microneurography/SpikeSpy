@@ -142,7 +142,7 @@ class tracked_neuron_unit:
         note: this will only return one latency per event, if there are multiple events in the same time, it will only return the first one.
 
         """
-
+        
         next_spikes = np.searchsorted(self.event.times, event_signal).magnitude
         next_spikes = np.clip(next_spikes, 0, len(self.event.times) - 1)
         if len(self.event.times) == 0:
@@ -150,7 +150,7 @@ class tracked_neuron_unit:
         spike_times = self.event.times[next_spikes] - (
             np.asarray(event_signal) * event_signal.units
         )
-
+        
         spike_times = spike_times.rescale(pq.ms)
         spike_times[spike_times < (0 * pq.s)] = np.nan * pq.ms
         return spike_times
@@ -254,7 +254,7 @@ class ViewerState(QObject):
             )
             evt2.name = evt.name
             self.spike_groups[self.cur_spike_group].event = evt2
-
+            
         self.spike_groups[
             self.cur_spike_group
         ].event.sort()  # TODO: not sure if this breaks the array annotations.

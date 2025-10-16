@@ -502,47 +502,43 @@ class SingleTraceView(QMainWindow):
                 return
 
             x += np.argmax(np.abs(dpts[x - w : x + w])) - w
-
+        print("set_cur_pos")
+        print(x)
         self.state.setUnit(x)
 
     def keyPressEvent(self, e):
-        if e.key() == Qt.Key_N: # add a new spike where we last had one
-            # self.state.setUnit(self.closest_pos)
-            # look back
+        if (e.key() == Qt.Key_N or e.key() == Qt.Key_Space): # add a new spike where we last had one
+            print("N KEY or SPACE KEY")
+            cur_event_time = self.state.event_signal.times[self.state.stimno]
+            sg = self.state.getUnitGroup()
+            cur_lat = sg.get_latencies(np.array([cur_event_time]) * cur_event_time.units)[0].rescale("s")
+            if cur_lat != np.nan and cur_lat < self.state.window_size:
+                # cursor already on the screen, why do you want to copy the last one?
+                return
+                
             for i in range(5):
-                spike_ts = (
-                    self.state.getUnitGroup()
-                    .get_latencies([self.state.event_signal[self.state.stimno-i]])[0]
-                    .rescale("s")
-                )
-                if not (spike_ts == np.nan or spike_ts > self.state.window_size):
+                prev_event_time = self.state.event_signal.times[self.state.stimno-i-1]
+                
+                sg = self.state.getUnitGroup()
+                prv_lat = sg.get_latencies(np.array([prev_event_time]) * prev_event_time.units)[0].rescale("s")
+                cur_point = int(prv_lat * self.state.sampling_rate)
+                
+                if cur_point != np.nan and prv_lat < self.state.window_size:
+                    self.set_cur_pos(cur_point)
+                    self.fig.canvas.draw_idle()
                     break
-            
-            # look forward
-            if not (spike_ts == np.nan or spike_ts > self.state.window_size):
-                for i in range(5):
-                    spike_ts = (
-                        self.state.getUnitGroup()
-                        .get_latencies([self.state.event_signal[self.state.stimno+i]])[0]
-                        .rescale("s")
-                    )
-                    if not (spike_ts == np.nan or spike_ts > self.state.window_size):
-                        break
-
-            if spike_ts == np.nan:
-                spike_ts = self.closest_pos
-
-            self.state.setUnit(spike_ts)
-                                
-        elif e.key() == Qt.Key_Z:
+                       
+        elif e.key() == Qt.Key_Z: # Although the zoom works, it can't be undone...
+            print("Z KEY")
             # get current spike location
             spike_ts = (
                 self.state.getUnitGroup()
-                .get_latencies([self.state.event_signal[self.state.stimno]])[0]
+                .get_latencies([self.state.event_signal[self.state.stimno].magnitude]*self.state.event_signal.units)[0]
                 .rescale("s")
             )
             if spike_ts == np.nan or spike_ts > self.state.window_size:
                 return
+            # set the xlim to 5 ms before and after spike
             self.ax.set_xlim(spike_ts.magnitude - 0.005, spike_ts.magnitude + 0.005)
 
             e = self.state.event_signal[self.state.stimno]
@@ -551,7 +547,7 @@ class SingleTraceView(QMainWindow):
                 self.state.analog_signal.time_slice(
                     e + spike_ts - (2 * pq.ms), e + spike_ts + (2 * pq.ms)
                 )
-                .rescale(pq.mV)
+                #.rescale(pq.mV)
                 .magnitude
             )
             min_val = np.min(vals)
@@ -565,6 +561,7 @@ class SingleTraceView(QMainWindow):
             and (e.modifiers() & Qt.ShiftModifier)
             and self.conv is not None
         ):
+            print("SHIFT + LEFT/RIGHT KEY")
             cur_stimpos = self.state.getUnitGroup().idx_arr[self.state.stimno][0]
             conv_high = np.percentile(self.conv[self.state.stimno][1000:-1000], 99)
             idx, _ = find_peaks(self.conv[self.state.stimno], conv_high)
