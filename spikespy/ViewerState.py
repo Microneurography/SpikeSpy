@@ -603,8 +603,6 @@ def load_file(data_path, type="h5", **kwargs):
             ),
         ]
 
-        #print(DS4_channels)
-        #print(additional_channels)
         data = open_aptrack(data_path, t, config, additional_channels)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
@@ -764,9 +762,6 @@ class APTrackDialog(QDialog):
         for i in range(len(self.inputBoxes)-2):
             config[self.labelBoxes[i+2].text()] = self.inputBoxes[i+2].text()
 
-        print("get_config")
-        print(config)
-
         return config
     
     def addWidget(self):
@@ -780,7 +775,6 @@ class APTrackDialog(QDialog):
     def removeWidget(self):
         if self.topLayout.rowCount()<5:
             return
-        print(self.labelBoxes)
         self.topLayout.removeRow(self.topLayout.rowCount()-1)
         self.labelBoxes.pop()
         self.inputBoxes.pop()

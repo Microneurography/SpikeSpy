@@ -438,8 +438,6 @@ def process_folder(
         "messages" + (f"_{record_no}" if record_no > 1 else "") + ".events"
     )
 
-    print(signals)
-
     neo = as_neo(
         signals, str(messages) if messages.exists() else None, record_no=record_no
     )

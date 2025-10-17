@@ -343,6 +343,11 @@ class MultiTraceView(QMainWindow):
         self.settingsDialog = DialogSignalSelect()
         self.settingsButton.clicked.connect(lambda: self.settingsDialog.show())
         self.rightPlots = {}
+
+        self.toggleMaxMeanButton = QPushButton("Show max",self)
+        self.toggleMaxMeanButton.setCheckable(True)
+        self.toggleMaxMeanButton.clicked.connect(lambda: self.toggleMaxMean())
+
         toolbar2 = QToolBar("Controls", self)
         toolbar2.addWidget(QLabel("Colour scale (std): "))
         toolbar2.addWidget(QLabel("Min"))
@@ -361,9 +366,9 @@ class MultiTraceView(QMainWindow):
         toolbar2.addWidget(unitOnlyRadio)
         toolbar2.addSeparator()
         
-        
         toolbar2.addWidget(self.polySelectButton)
         toolbar2.addWidget(self.settingsButton)
+        toolbar2.addWidget(self.toggleMaxMeanButton)
         
         self.addToolBarBreak()
         self.addToolBar(Qt.TopToolBarArea, toolbar2)
@@ -577,10 +582,17 @@ class MultiTraceView(QMainWindow):
         }
         for x in self.state.segment.analogsignals:
             try:
-                self.right_ax_data[x.name] = (
-                    np.max(self.state.get_erp(x, self.state.event_signal), axis=1),
-                    np.arange(0, len(self.state.event_signal.times)),
-                )
+                if self.toggleMaxMeanButton.isChecked():
+                    self.right_ax_data[x.name] = (
+                        np.max(self.state.get_erp(x, self.state.event_signal), axis=1),
+                        np.arange(0, len(self.state.event_signal.times)),
+                    )
+                else:
+                    self.right_ax_data[x.name] = (
+                        np.mean(self.state.get_erp(x, self.state.event_signal), axis=1),
+                        np.arange(0, len(self.state.event_signal.times)),
+                    )
+                    
             except:
                 pass
         
@@ -870,6 +882,14 @@ class MultiTraceView(QMainWindow):
 
         # if e.inaxes == self.ax:
         self.state.setStimNo(round(e.ydata))
+
+    def toggleMaxMean(self):
+        if self.toggleMaxMeanButton.isChecked():
+            self.toggleMaxMeanButton.setText("Show Mean")
+        else:
+            self.toggleMaxMeanButton.setText("Show Max")
+        self.reset_right_axes_data()
+        
 
     def __del__(self):
         self.remove_references()
