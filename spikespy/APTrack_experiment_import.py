@@ -405,35 +405,29 @@ def process_folder(
             "A TTL of the stimulation voltage",
         ),
         APTrackRecording(
-            find_channel(config.get("stim", "ADC5")),
+            find_channel(config.get("stimVolt", "ADC4")),
             TypeID.TTL,
             "env.stim",
             "A TTL of the stimulation",
         ),
-        APTrackRecording(
-            find_channel(config.get("stimVolt_pot", "ADC2")),
-            TypeID.ANALOG,
-            "env.potentiometer",
-            "A TTL of the stimulation voltage",
-        ),
-        APTrackRecording(
-            find_channel(config.get("stim", "ADC5")),
-            TypeID.ANALOG,
-            "env.stim",
-            "A TTL of the stimulation",
-        ),
-        APTrackRecording(
-            find_channel(config.get("thermode", "ADC7")),
-            TypeID.ANALOG,
-            "env.thermode",
-            "Thermal stimulation temperatures",
-        ),
-        APTrackRecording(
-            find_channel(config.get("button", "ADC8")),
-            TypeID.TTL,
-            "rec.button",
-            "Manual button press, usually to signify a change in protocol or mechanical stimulation",
-        ),
+        # APTrackRecording(
+        #     find_channel(config.get("stimVolt_pot", "ADC2")),
+        #     TypeID.ANALOG,
+        #     "env.potentiometer",
+        #     "A TTL of the stimulation voltage",
+        # ),
+        # APTrackRecording(
+        #     find_channel(config.get("thermode", "ADC7")),
+        #     TypeID.ANALOG,
+        #     "env.thermode",
+        #     "Thermal stimulation temperatures",
+        # ),
+        # APTrackRecording(
+        #     find_channel(config.get("button", "ADC8")),
+        #     TypeID.TTL,
+        #     "rec.button",
+        #     "Manual button press, usually to signify a change in protocol or mechanical stimulation",
+        # ),
     ]
     for aprec in extra_channels:
         if not (Path(aprec.filename).exists()):
@@ -443,6 +437,9 @@ def process_folder(
     messages = Path(foldername) / (
         "messages" + (f"_{record_no}" if record_no > 1 else "") + ".events"
     )
+
+    print(signals)
+
     neo = as_neo(
         signals, str(messages) if messages.exists() else None, record_no=record_no
     )
@@ -462,6 +459,7 @@ def process_folder(
         original_folder=str(foldername),
     )
 
+    
     return neo
 
 

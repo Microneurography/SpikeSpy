@@ -339,7 +339,7 @@ class MultiTraceView(QMainWindow):
         self.polySelectButton = QPushButton("Selector")
         self.polySelectButton.clicked.connect(lambda *args: self.toggle_polySelector())
 
-        self.settingsButton = QPushButton("settings")
+        self.settingsButton = QPushButton("Settings")
         self.settingsDialog = DialogSignalSelect()
         self.settingsButton.clicked.connect(lambda: self.settingsDialog.show())
         self.rightPlots = {}
@@ -572,8 +572,8 @@ class MultiTraceView(QMainWindow):
         out[np.where(~idx_na)[0][1:]] = current_spike_diffs
         # out[np.isnan(out)] = 0 * pq.ms
         self.right_ax_data = {
-            "Stimulation Frequency": stimFreq_data,
-            "latency_diff": (out, np.arange(len(latencies))),
+            "Stim. Freq. (Hz)": stimFreq_data,
+            "Latency Diff.": (out, np.arange(len(latencies))),
         }
         for x in self.state.segment.analogsignals:
             try:
@@ -583,10 +583,13 @@ class MultiTraceView(QMainWindow):
                 )
             except:
                 pass
+        
+        if not self.rightPlots:
+            self.rightPlots = {k: True for k, v in self.right_ax_data.items()}
 
-        self.rightPlots = {k: True for k, v in self.right_ax_data.items()}
         if self.settingsDialog is not None:
             self.settingsDialog.destroy()
+            
         self.settingsDialog = DialogSignalSelect(options=self.rightPlots)
 
         def updateView(k, v):

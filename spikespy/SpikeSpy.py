@@ -650,6 +650,7 @@ def run():
         w.state.loadFile(sys.argv[1])
     # w = SpikeGroupView()
     w.showMaximized()
+    print(app)
     sys.exit(app.exec())
 
 

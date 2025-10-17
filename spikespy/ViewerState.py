@@ -24,6 +24,9 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QDialogButtonBox,
     QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget
 )
 from functools import lru_cache
 from neo.core.objectlist import ObjectList
@@ -567,11 +570,19 @@ def load_file(data_path, type="h5", **kwargs):
     elif type == "APTrack":
         d = APTrackDialog()
         val = d.exec_()
-
         config = d.get_config()
         t = config.pop("record")
+        
+        additional_channels = []
+        for k, v in config.items():
+            extra_channel = APTrackRecording(
+                v,
+                TypeID.TTL,
+                k,
+                "",
+            )
+            additional_channels.append(extra_channel)
 
-        # HACK: Add DS4 channels
         DS4_channels = [
             APTrackRecording(
                 "ADC2",
@@ -587,6 +598,8 @@ def load_file(data_path, type="h5", **kwargs):
             ),
         ]
 
+        print(DS4_channels)
+        print(additional_channels)
         data = open_aptrack(data_path, t, config, DS4_channels)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
@@ -678,37 +691,91 @@ def open_smrx_to_neo(file):
 class APTrackDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setWindowTitle("Load APTrack Data")
 
-        self.layout = QFormLayout()
-        self.setLayout(self.layout)
-
-        self.layout.addRow(QLabel("custom parameters"))
+        self.bottomLayout = QFormLayout()
+        self.topLayout = QFormLayout()
+        self.mainLayout = QVBoxLayout()
+        
+        self.topLayout.addRow(QLabel("custom parameters"))
         self.sbRecordNumber = QSpinBox()
         self.sbRecordNumber.setMinimum(0)
 
-        self.layout.addRow(QLabel("recording"), self.sbRecordNumber)
+        self.inputsConfig = {}
+        self.labelBoxes = [];
+        self.inputBoxes = [];
+
+        self.topLayout.addRow(QLabel("Rec#"), self.sbRecordNumber)
+        
+        labelBox = QLabel("Rec. channel")
+        inputBox = QLineEdit("CH1")
+        self.topLayout.addRow(labelBox, inputBox)
+        self.labelBoxes.append(labelBox)
+        self.inputBoxes.append(inputBox)
+
+        labelBox = QLabel("Stimulus ch.")
+        inputBox = QLineEdit("ADC2")
+        self.topLayout.addRow(labelBox, inputBox)
+        self.labelBoxes.append(labelBox)
+        self.inputBoxes.append(inputBox)
+
+
         config = {
-            "rd.0": "CH1",
-            "stimVolt": "ADC4",
-            "stim": "ADC5",
-            "thermode": "ADC7",
+            #"rd.0": "CH1",
+            #"stimVolt": "ADC2", # strictly necessary
+            #"stim": "ADC5", 
+            #"thermode": "ADC7",
             "button": "ADC8",
         }
-        self.inputsConfig = {}
         for k, v in config.items():
+            labelBox = QLineEdit(k)
             inputBox = QLineEdit(v)
+            self.labelBoxes.append(labelBox)
+            self.inputBoxes.append(inputBox)
+            self.topLayout.addRow(labelBox, inputBox)
+        
+        self.addButton = QPushButton("+")
+        self.addButton.clicked.connect(self.addWidget)
+        self.removeButton = QPushButton("-")
+        self.removeButton.clicked.connect(self.removeWidget)
+        
+        self.bottomLayout.addRow(self.addButton,self.removeButton)
 
-            self.inputsConfig[k] = inputBox
-            self.layout.addRow(QLabel(k), inputBox)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.layout.addRow(self.buttons)
+        self.bottomLayout.addRow(self.buttons)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
 
+        self.mainLayout.addLayout(self.topLayout)
+        self.mainLayout.addLayout(self.bottomLayout)
+        self.setLayout(self.mainLayout)
+        
     def get_config(self):
         config = {}
         config["record"] = self.sbRecordNumber.value()
-        for k, v in self.inputsConfig.items():
-            config[k] = v.text()
+        config["rd.0"] = self.inputBoxes[0].text()
+        config["stimVolt"] = self.inputBoxes[1].text()
+
+        for i in range(len(self.inputBoxes)-2):
+            config[self.labelBoxes[i+2].text()] = self.inputBoxes[i+2].text()
+
+        print("get_config")
+        print(config)
 
         return config
+    
+    def addWidget(self):
+        # TODO: inputs config will break with this method
+        labelBox = QLineEdit("new_input")
+        inputBox = QLineEdit("ADC8")
+        self.topLayout.addRow(labelBox, inputBox)
+        self.labelBoxes.append(labelBox)
+        self.inputBoxes.append(inputBox)
+
+    def removeWidget(self):
+        if self.topLayout.rowCount()<5:
+            return
+        print(self.labelBoxes)
+        self.topLayout.removeRow(self.topLayout.rowCount()-1)
+        self.labelBoxes.pop()
+        self.inputBoxes.pop()
