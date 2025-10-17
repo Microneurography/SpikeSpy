@@ -578,7 +578,7 @@ class MultiTraceView(QMainWindow):
         for x in self.state.segment.analogsignals:
             try:
                 self.right_ax_data[x.name] = (
-                    np.mean(self.state.get_erp(x, self.state.event_signal), axis=1),
+                    np.max(self.state.get_erp(x, self.state.event_signal), axis=1),
                     np.arange(0, len(self.state.event_signal.times)),
                 )
             except:

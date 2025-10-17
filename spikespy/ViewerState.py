@@ -573,11 +573,16 @@ def load_file(data_path, type="h5", **kwargs):
         config = d.get_config()
         t = config.pop("record")
         
+        # skip the predicted items so we don't duplicate them
+        skip_list = ["rd.0","rd.0.bp","stimVolt","stim"]
         additional_channels = []
         for k, v in config.items():
+            if any(k in x for x in skip_list):
+                continue
+
             extra_channel = APTrackRecording(
                 v,
-                TypeID.TTL,
+                TypeID.ANALOG,
                 k,
                 "",
             )
@@ -598,9 +603,9 @@ def load_file(data_path, type="h5", **kwargs):
             ),
         ]
 
-        print(DS4_channels)
-        print(additional_channels)
-        data = open_aptrack(data_path, t, config, DS4_channels)
+        #print(DS4_channels)
+        #print(additional_channels)
+        data = open_aptrack(data_path, t, config, additional_channels)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
     elif type == "spike2":
