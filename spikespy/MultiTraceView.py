@@ -921,7 +921,7 @@ class MultiTraceView(QMainWindow):
     def toggle_plot_messages(self,events):
         print("toggle_plot_messages")
         if self.messages is not None:
-            for txt in enumerate(self.messages):
+            for txt in self.messages:
                 txt.remove()
             self.messages = None
         else:
