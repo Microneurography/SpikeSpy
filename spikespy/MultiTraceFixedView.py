@@ -239,7 +239,7 @@ class TestMultiLinePlot(QMainWindow):
     def __init__(self, state: ViewerState, rate=5000):
         super().__init__()
         self.viewer_state = state
-        self.plot = MultiLinePlot(self.viewer_state)
+        self.plot = []#MultiLinePlot(self.viewer_state)
         self.setCentralWidget(self.plot)
         self.stimno = 200
 

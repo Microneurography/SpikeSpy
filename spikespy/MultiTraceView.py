@@ -204,7 +204,7 @@ class falling_leaf_plotter:
             #self.hline.set_animated(True)
 
             #ax.draw_artist(self.hline)
-            return self.hline
+            return self.hline    
 
     def plot_spikegroup(self, ax, sg, **kwargs):
         kwargs = {"alpha":0.5, **kwargs}
@@ -240,6 +240,7 @@ class MultiTraceView(QMainWindow):
         self.hline = None
         self.figcache = None
         self.references = []
+        self.messages = None
 
         # throttle the update for upateAll to every 500ms when using the comboboxes.
         self.update_timer = QTimer()
@@ -283,16 +284,18 @@ class MultiTraceView(QMainWindow):
         self.lowerSpinBox.setSingleStep(0.1)
         self.lowerSpinBox.setRange(0, 10)
         self.lowerSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
+        self.lowerSpinBox.setValue(0.5)
+        self.lowerSpinBox.setMinimumWidth(100)
 
         self.upperSpinBox = QDoubleSpinBox(self)
         self.upperSpinBox.setRange(0, 10)
         self.upperSpinBox.setDecimals(2)
         self.upperSpinBox.setSingleStep(0.1)
         self.upperSpinBox.setValue(2)
+        self.upperSpinBox.setMinimumWidth(100)
 
         self.lowerSpinBox.valueChanged.connect(self.upperSpinBox.setMinimum)
         self.upperSpinBox.valueChanged.connect(self.lowerSpinBox.setMaximum)
-        self.lowerSpinBox.setValue(0.5)
         self.upperSpinBox.valueChanged.connect(lambda x: self.update_timer.start())
 
         self.referneces = []
@@ -348,6 +351,10 @@ class MultiTraceView(QMainWindow):
         self.toggleMaxMeanButton.setCheckable(True)
         self.toggleMaxMeanButton.clicked.connect(lambda: self.toggleMaxMean())
 
+        self.showMessages = QPushButton("Show messages",self)
+        self.showMessages.setCheckable(True)
+        self.showMessages.clicked.connect(lambda: self.toggleShowMessages())
+
         toolbar2 = QToolBar("Controls", self)
         toolbar2.addWidget(QLabel("Colour scale (std): "))
         toolbar2.addWidget(QLabel("Min"))
@@ -369,6 +376,7 @@ class MultiTraceView(QMainWindow):
         toolbar2.addWidget(self.polySelectButton)
         toolbar2.addWidget(self.settingsButton)
         toolbar2.addWidget(self.toggleMaxMeanButton)
+        toolbar2.addWidget(self.showMessages)
         
         self.addToolBarBreak()
         self.addToolBar(Qt.TopToolBarArea, toolbar2)
@@ -889,7 +897,42 @@ class MultiTraceView(QMainWindow):
         else:
             self.toggleMaxMeanButton.setText("Show Max")
         self.reset_right_axes_data()
+
+    def toggleShowMessages(self):
+        i = 0
+        i = next(
+            i for i, e in enumerate(self.state.segment.events) if "log.other" == e.name
+        )
         
+        
+
+        if self.showMessages.isChecked():
+            self.showMessages.setText("Hide messages")
+
+        else:
+            self.showMessages.setText("Show messages")
+            #self.plotter.highlight_stim(self.ax, stimNo, partial=False)
+            
+        self.toggle_plot_messages(self.state.segment.events[i])
+        self.view.update()
+        self.view.draw_idle()
+        self.view.draw()
+    
+    def toggle_plot_messages(self,events):
+        print("toggle_plot_messages")
+        if self.messages is not None:
+            for txt in enumerate(self.messages):
+                txt.remove()
+            self.messages = None
+        else:
+            messages = []
+            for i,t in enumerate(events):
+                yy = self.state.event_signal.times.searchsorted(t, 'right') - 1 
+                xx = 0
+                ss = events.array_annotations["message"][i]
+                messages.append(self.ax.text(xx,yy,ss))
+                
+            self.messages = messages
 
     def __del__(self):
         self.remove_references()
