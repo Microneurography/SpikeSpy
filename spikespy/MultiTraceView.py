@@ -482,6 +482,7 @@ class MultiTraceView(QMainWindow):
             out[:, 1].astype(int), out[:, 0].astype(int)
         )
         self.state.updateUnit(evt, merge=True)
+        self.pg_selector.clear()
 
     def toggle_polySelector(self, mode=None):
         self.pg_selector.set_active(mode or (not self.pg_selector.active))
