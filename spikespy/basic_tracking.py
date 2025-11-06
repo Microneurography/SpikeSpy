@@ -32,15 +32,12 @@ def track_basic(
         flip = True
         threshold = -threshold
 
-    print("track_basic")
-    print(threshold)
     for x in stimulus_events[start_idx:]:
         timeslice = raw_data.time_slice(
             x + offset - (window / 2), x + offset + (window / 2)
         )
         if flip:
-            timeslice = timeslice * -1
-            
+            timeslice = timeslice * -1    
         max_idx = np.argmax(timeslice)
         max_val = timeslice[max_idx]
         print("loop")

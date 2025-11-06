@@ -4,6 +4,7 @@ import tempfile
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+import time
 from tempfile import tempdir
 from turtle import update
 from typing import Any, List, Optional, Union
@@ -49,7 +50,15 @@ class lru_numpy_memmap:
     def clear_cache(self):
         for k, v in self.cache_dict.items():
             assert Path(v).parent == Path(self.cache_dir)
-            Path(v).unlink()
+            for attempt in range(3):
+                try:
+                    Path(v).unlink()
+                    break
+                # you may want to explicitly check for PermissionError
+                except Exception as e:
+                    time.sleep(1)
+
+            
         self.cache_dict = {}
         self.data_cache = {}
 
