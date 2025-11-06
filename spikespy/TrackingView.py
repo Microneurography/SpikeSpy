@@ -82,6 +82,13 @@ class TrackingView(QMainWindow):
         self.qsb_max_skip = qsb_max_skip
         layout.addRow(self.tr("Maximum skips"), qsb_max_skip)
 
+        qsb_track_limit = QSpinBox(self)
+        qsb_track_limit.setMaximum(1000)
+        qsb_track_limit.setMinimum(0)
+        qsb_track_limit.setValue(0)
+        self.qsb_track_limit = qsb_track_limit
+        layout.addRow(self.tr("Limit tracking"), qsb_track_limit)
+
         # qbut_threshold_update.setFixedHeight(20)
         # layout.addRow(qbut_threshold_update)
         qbut_go = QPushButton("Track")
@@ -121,6 +128,7 @@ class TrackingView(QMainWindow):
             window=window,
             threshold=threshold,
             max_skip=self.qsb_max_skip.value(),
+            track_limit=self.qsb_track_limit.value()
         )
 
         self.state.updateUnit(
