@@ -28,18 +28,25 @@ def track_basic(
     traced_times = []
     skipped = 0
 
+    if threshold < 0:
+        flip = True
+        threshold = -threshold
+
+    print("track_basic")
+    print(threshold)
     for x in stimulus_events[start_idx:]:
         timeslice = raw_data.time_slice(
             x + offset - (window / 2), x + offset + (window / 2)
         )
-        if threshold < 0:
+        if flip:
             timeslice = timeslice * -1
+            
         max_idx = np.argmax(timeslice)
         max_val = timeslice[max_idx]
-
-        if (max_val >= threshold and threshold >= 0) or (
-            max_val <= threshold and threshold < 0
-        ):
+        print("loop")
+        print(threshold)
+        
+        if (max_val >= threshold and threshold >= 0):
             skipped = 0
             max_ts = timeslice.times[
                 max_idx

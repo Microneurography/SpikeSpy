@@ -161,12 +161,13 @@ def as_neo(
                     )
                 )
         elif f.probe_type == TypeID.TTL:
+            print("MAGIC 1")
             m = np.mean(data)
             # find events from continuous file
             idxs = find_square_pulse_numpy(
                 data,
                 int(int(header["sampleRate"]) * 0.0004),
-                (2 * np.std(data - m)) + m,
+                (10 * np.std(data - m)) + m,
             )  # 2sd from mean
 
             idxs_rising = idxs[
