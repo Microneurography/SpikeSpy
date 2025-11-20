@@ -511,10 +511,10 @@ class MultiTraceView(QMainWindow):
 
     def keyPressEvent(self, e):
         print(e.key())
-        if e.key() == Qt.Key_P:
+        if e.key() in (Qt.Key_P, Qt.Key_Escape):
             self.toggle_polySelector()
         if (
-            e.key() == Qt.Key_Return and self.pg_selector.active
+            e.key() in (Qt.Key_Return, Qt.Key_Enter) and self.pg_selector.active
         ):  # action when pg_selector is done. #TODO: move elsewhere
 
             self.polySelect()
