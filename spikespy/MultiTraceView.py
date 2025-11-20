@@ -240,6 +240,7 @@ class MultiTraceView(QMainWindow):
         self.figcache = None
         self.references = []
         self.messages = None
+        self.legend = None
 
         # throttle the update for upateAll to every 500ms when using the comboboxes.
         self.update_timer = QTimer()
@@ -353,6 +354,10 @@ class MultiTraceView(QMainWindow):
         self.showMessages.setCheckable(True)
         self.showMessages.clicked.connect(lambda: self.toggleShowMessages())
 
+        self.showLegend = QPushButton("Show legend", self)
+        self.showLegend.setCheckable(True)
+        self.showLegend.clicked.connect(lambda x: self.render())
+
         toolbar2 = QToolBar("Controls", self)
         toolbar2.addWidget(QLabel("Colour scale (std): "))
         toolbar2.addWidget(QLabel("Min"))
@@ -375,6 +380,7 @@ class MultiTraceView(QMainWindow):
         toolbar2.addWidget(self.settingsButton)
         toolbar2.addWidget(self.toggleMaxMeanButton)
         toolbar2.addWidget(self.showMessages)
+        toolbar2.addWidget(self.showLegend)
 
         self.addToolBarBreak()
         self.addToolBar(Qt.TopToolBarArea, toolbar2)
@@ -504,7 +510,7 @@ class MultiTraceView(QMainWindow):
             self.pg_selector.set_visible(False)
 
     def keyPressEvent(self, e):
-
+        print(e.key())
         if e.key() == Qt.Key_P:
             self.toggle_polySelector()
         if (
@@ -797,6 +803,17 @@ class MultiTraceView(QMainWindow):
             for x in self.points_spikegroups:
                 if x is not None:
                     x.remove()
+
+            # optional legend
+            print("before")
+            print(self.legend)
+            if self.legend is not None:
+                for txt in self.legend:
+                    txt.remove()
+                    print("during")
+                    print(self.legend)
+
+                self.legend = None
             # except:
             #    pass
         points_spikegroups = []
@@ -833,11 +850,33 @@ class MultiTraceView(QMainWindow):
         points_spikegroups = []
         colors = get_cmap("Set2").colors
         if self.includeAllUnitsCheckBox.isChecked():
+            legend = []
             for i, x in enumerate(self.state.spike_groups):
+                if x.event.name == None:
+                    ss = str(i)
+                else:
+                    ss = x.event.name
+                points = np.array(
+                    [(a[0], i) for i, a in enumerate(x.idx_arr) if a is not None]
+                )
+
                 if i == self.state.cur_spike_group:
+                    if self.showLegend.isChecked():
+                        tt = self.ax.text(points[0][0], points[0][1], ss)
+                        tt.set_color("red")
+                        legend.append(tt)
                     continue
+
+                if self.showLegend.isChecked():
+                    tt = self.ax.text(points[0][0], points[0][1], ss)
+                    tt.set_color(colors[i % len(colors)])
+                    legend.append(tt)
+
                 artists = plot(i, color=colors[i % len(colors)])
                 points_spikegroups.append(artists)
+            self.legend = legend
+            print("end")
+            print(self.legend)
 
         # bg = self.
         if self.includeUnitCheckbox.isChecked():
@@ -926,6 +965,49 @@ class MultiTraceView(QMainWindow):
             # self.plotter.highlight_stim(self.ax, stimNo, partial=False)
 
         self.toggle_plot_messages(self.state.segment.events[i])
+        self.view.update()
+        self.view.draw_idle()
+        self.view.draw()
+
+    def toggleLegend(self):
+        from matplotlib.cm import get_cmap
+
+        print("togglelegend")
+        if self.showLegend.isChecked():
+            self.showLegend.setText("Hide legend")
+            self.includeAllUnitsCheckBox.checkState = True
+        else:
+            self.showLegend.setText("Show legend")
+
+        if self.legend is not None:
+            for txt in self.legend:
+                txt.remove()
+            self.legend = None
+        else:
+            if self.includeAllUnitsCheckBox.isChecked() & self.showLegend.isChecked():
+                legend = []
+                for i, x in enumerate(self.state.spike_groups):
+                    # yy = np.min(x.get_sweeps(self.state.event_signal))
+                    points = np.array(
+                        [(a[0], i) for i, a in enumerate(x.idx_arr) if a is not None]
+                    )
+                    # xx = np.min(x.get_latencies([self.state.event_signal[yy].magnitude]*self.state.event_signal.units))
+                    if x.event.name == None:
+                        ss = str(i)
+                    else:
+                        ss = x.event.name
+                    xx = points[0][0]
+                    yy = points[0][1]
+                    tt = self.ax.text(xx, yy, ss)
+                    colors = get_cmap("Set2").colors
+                    tt.set_color(colors[i % len(colors)])
+                    legend.append(tt)
+                    print(ss)
+                    print(xx)
+                    print(yy)
+
+                self.legend = legend
+
         self.view.update()
         self.view.draw_idle()
         self.view.draw()
