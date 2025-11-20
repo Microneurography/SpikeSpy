@@ -529,6 +529,8 @@ class SingleTraceView(QMainWindow):
                 prv_lat = sg.get_latencies(
                     np.array([prev_event_time]) * prev_event_time.units
                 )[0].rescale("s")
+                if prv_lat == np.nan:
+                    continue
                 cur_point = int(prv_lat * self.state.sampling_rate)
 
                 if cur_point != np.nan and prv_lat < self.state.window_size:
