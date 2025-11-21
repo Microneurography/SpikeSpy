@@ -177,6 +177,14 @@ class MultiAnalogSignal:
     @property
     def times(self):
         return np.concatenate([x.times for x in self.signals])
+    @property
+    def sampling_period(self):
+        """
+        Interval between two samples.
+
+        (1/:attr:`sampling_rate`)
+        """
+        return 1.0 / self.sampling_rate
 
 
 from neo import Event

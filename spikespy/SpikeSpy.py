@@ -636,8 +636,8 @@ def align_spikegroup(spikegroup, erp_arr):
     pass
 
 
-def run():
-    app = QApplication(sys.argv)
+def run(filename=None):
+    app = QApplication.instance() or QApplication(sys.argv)
     icon_path = Path(sys.modules[__name__].__file__).parent.joinpath("ui/icon.svg")
     app.setWindowIcon(QIcon(QPixmap(str(icon_path))))
     # data, signal_chan, event_signal, spike_groups = load_file(
@@ -646,8 +646,11 @@ def run():
     #     analog_signal=signal_chan, event_signal=event_signal, spike_groups=spike_groups
     # )
     w = MdiView()
-    if len(sys.argv) > 1:
+    if filename is not None:
+        w.state.loadFile(filename)
+    elif len(sys.argv) > 1:
         w.state.loadFile(sys.argv[1])
+    
     # w = SpikeGroupView()
     w.showMaximized()
     print(app)
@@ -658,7 +661,7 @@ from importlib.metadata import version, metadata, packages_distributions
 
 
 def run_spikespy(viewerState):
-    app = QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     icon_path = Path(sys.modules[__name__].__file__).parent.joinpath("ui/icon.svg")
     app.setWindowIcon(QIcon(QPixmap(str(icon_path))))
     # data, signal_chan, event_signal, spike_groups = load_file(

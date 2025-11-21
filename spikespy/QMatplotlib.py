@@ -12,7 +12,7 @@ class QMatplotlib(QMainWindow):
     # Define a custom signal for updating the plot
     plot_update_signal = Signal(bool)
 
-    def __init__(self, state=None, parent=None, include_matplotlib_toolbar=False):
+    def __init__(self, state=None, parent=None, include_matplotlib_toolbar=True):
         super().__init__(parent)
         self.settings = {}
 
@@ -89,6 +89,10 @@ class QMatplotlib(QMainWindow):
         self.ax = self.figure.add_subplot(111)
 
     def draw_figure(self):
+        """
+        this is the main plotting function. 
+        Override this to create your plot.
+        """
         self.ax.plot([1, 2, 3, 4, 5], [1, 4, 9, 16, 25])
 
     def on_limits_change(self, event_ax):
@@ -119,6 +123,8 @@ class QMatplotlib(QMainWindow):
 
         # self.setup_figure()
         self.update_figure()
+
+
 
 
 if __name__ == "__main__":
