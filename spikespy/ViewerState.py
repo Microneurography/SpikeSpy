@@ -58,7 +58,6 @@ class lru_numpy_memmap:
                 except Exception as e:
                     time.sleep(1)
 
-            
         self.cache_dict = {}
         self.data_cache = {}
 
@@ -176,21 +175,20 @@ class tracked_neuron_unit:
         #     i = np.searchsorted(event_signal, e) - 1
         #     p[i] = (e - event_signal[i]).rescale(pq.ms)
         return p
-    
+
     def get_sweeps(self, event_signal: pq.UnitTime) -> pq.UnitTime:
         """
         returns the sweep numbers/event numbers in the spikegroup.
-        
+
         """
-        
+
         if len(self.event.times) == 0:
             return np.nan
         if len(event_signal) == 0:
             return np.nan
-        
-        sweeps = np.searchsorted(event_signal,self.event.times).magnitude
+
+        sweeps = np.searchsorted(event_signal, self.event.times).magnitude
         return sweeps
-        
 
 
 class ViewerState(QObject):

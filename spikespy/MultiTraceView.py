@@ -805,8 +805,6 @@ class MultiTraceView(QMainWindow):
                     x.remove()
 
             # optional legend
-            print("before")
-            print(self.legend)
             if self.legend is not None:
                 for txt in self.legend:
                     txt.remove()
@@ -864,6 +862,8 @@ class MultiTraceView(QMainWindow):
                     if self.showLegend.isChecked():
                         tt = self.ax.text(points[0][0], points[0][1], ss)
                         tt.set_color("red")
+                        tt.set_backgroundcolor("white")
+                        tt.set_fontweight("bold")
                         legend.append(tt)
                     continue
 
@@ -965,49 +965,6 @@ class MultiTraceView(QMainWindow):
             # self.plotter.highlight_stim(self.ax, stimNo, partial=False)
 
         self.toggle_plot_messages(self.state.segment.events[i])
-        self.view.update()
-        self.view.draw_idle()
-        self.view.draw()
-
-    def toggleLegend(self):
-        from matplotlib.cm import get_cmap
-
-        print("togglelegend")
-        if self.showLegend.isChecked():
-            self.showLegend.setText("Hide legend")
-            self.includeAllUnitsCheckBox.checkState = True
-        else:
-            self.showLegend.setText("Show legend")
-
-        if self.legend is not None:
-            for txt in self.legend:
-                txt.remove()
-            self.legend = None
-        else:
-            if self.includeAllUnitsCheckBox.isChecked() & self.showLegend.isChecked():
-                legend = []
-                for i, x in enumerate(self.state.spike_groups):
-                    # yy = np.min(x.get_sweeps(self.state.event_signal))
-                    points = np.array(
-                        [(a[0], i) for i, a in enumerate(x.idx_arr) if a is not None]
-                    )
-                    # xx = np.min(x.get_latencies([self.state.event_signal[yy].magnitude]*self.state.event_signal.units))
-                    if x.event.name == None:
-                        ss = str(i)
-                    else:
-                        ss = x.event.name
-                    xx = points[0][0]
-                    yy = points[0][1]
-                    tt = self.ax.text(xx, yy, ss)
-                    colors = get_cmap("Set2").colors
-                    tt.set_color(colors[i % len(colors)])
-                    legend.append(tt)
-                    print(ss)
-                    print(xx)
-                    print(yy)
-
-                self.legend = legend
-
         self.view.update()
         self.view.draw_idle()
         self.view.draw()
