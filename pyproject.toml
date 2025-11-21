@@ -34,6 +34,7 @@ dev = [
     "pytest-qt>=4.2.0,<5",
     "ipykernel>=6.21.3,<7",
     "ipython>=8.11.0,<9",
+    "pyinstaller>=6.13.0",
 ]
 
 [tool.hatch.build.targets.sdist]

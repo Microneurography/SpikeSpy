@@ -166,6 +166,7 @@ class tracked_neuron_unit:
         return p
 
 
+
 class ViewerState(QObject):
     onLoadNewFile = Signal()
     onUnitChange = Signal(int)
@@ -651,6 +652,12 @@ def prompt_for_neo_file(type):
         raise Exception(f"Unknown filetype: {type}")
     return fname, type
 
+def get_predicted_aps(self):
+    """
+    look at action potential predictors and return the predicted action potentials
+    """
+
+
 
 def open_matlab_to_neo(folder):
     from pathlib import Path
@@ -670,9 +677,15 @@ def open_matlab_to_neo(folder):
         seg.analogsignals.append(asig)
     return seg
 
-
-def open_smrx_to_neo(file):
-    pass
+class APPredictor():
+    def __init__(self, state: ViewerState):
+        self.state = state
+        self.state.onLoadNewFile.connect(self.update)
+        self.state.onUnitGroupChange.connect(self.update)
+        self.state.onUnitChange.connect(self.update)
+    def update(self):
+        # return an event signal with the predicted action potentials
+        pass
 
 
 class APTrackDialog(QDialog):

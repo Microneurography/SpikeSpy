@@ -1,10 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
-
+import os
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 import scipy
 block_cipher = None
 
-binaries = [] # collect_dynamic_libs('numpy')
+binaries = collect_dynamic_libs('scipy')
 scipy_libs = os.path.join(os.path.dirname(scipy.__file__), '.libs')
 datas = collect_data_files('nixio')
 datas += [('spikespy/ui/icon.*','.')]
