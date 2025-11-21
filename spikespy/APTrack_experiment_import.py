@@ -392,7 +392,7 @@ def process_folder(
 
     if config is None:
         config = {}
-    
+
     signals = [
         APTrackRecording(
             find_channel(config.get("rd.0", "CH1")),
@@ -467,7 +467,6 @@ def process_folder(
         original_folder=str(foldername),
     )
 
-    
     return neo
 
 

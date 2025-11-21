@@ -90,7 +90,7 @@ class QMatplotlib(QMainWindow):
 
     def draw_figure(self):
         """
-        this is the main plotting function. 
+        this is the main plotting function.
         Override this to create your plot.
         """
         self.ax.plot([1, 2, 3, 4, 5], [1, 4, 9, 16, 25])
@@ -123,8 +123,6 @@ class QMatplotlib(QMainWindow):
 
         # self.setup_figure()
         self.update_figure()
-
-
 
 
 if __name__ == "__main__":

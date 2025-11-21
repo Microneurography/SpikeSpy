@@ -70,6 +70,7 @@ from .MultiTraceFixedView import MultiTraceFixedView
 from .UnitSuggestor import UnitSuggestor
 import PySide6QtAds as QtAds
 from typing import Dict
+
 mplstyle.use("fast")
 
 window_options = {
@@ -84,8 +85,8 @@ window_options = {
     "Data": QNeoSelector,
     "Events": EventView,
 }
-suggestors:Dict[str,UnitSuggestor] = {
-}
+suggestors: Dict[str, UnitSuggestor] = {}
+
 
 class MdiView(QMainWindow):
     # signals
@@ -599,7 +600,7 @@ def save_file(filename, spike_groups, data: neo.Segment = None, metadata=None):
     else:
         data2 = neo.Segment()
 
-    for i,x in enumerate(spike_groups):
+    for i, x in enumerate(spike_groups):
         x.event.annotate(**metadata)
         x.event.name = x.event.name or f"unit_{i}"
         data2.events.append(x.event)
@@ -650,7 +651,7 @@ def run(filename=None):
         w.state.loadFile(filename)
     elif len(sys.argv) > 1:
         w.state.loadFile(sys.argv[1])
-    
+
     # w = SpikeGroupView()
     w.showMaximized()
     print(app)

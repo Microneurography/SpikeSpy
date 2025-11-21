@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
     QToolBar,
     QLabel,
     QSpacerItem,
-    QSizePolicy
+    QSizePolicy,
 )
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer
@@ -46,12 +46,13 @@ from .QMatplotlib import QMatplotlib
 from matplotlib.lines import Line2D
 import time
 
-#mplstyle.use("fast")
+# mplstyle.use("fast")
 
 from matplotlib.axes import Axes
 from .helpers import qsignal_throttle_wrapper
 from matplotlib.image import AxesImage
 from .CachedAxesImage import CachedAxesImage
+
 
 class falling_leaf_plotter:
     def __init__(self):
@@ -63,8 +64,11 @@ class falling_leaf_plotter:
         self.mode = None
         self.partial = False
         self.hline = None
+
     def setup(self, ax: Axes, erp, sampling_rate=1000, mode="heatmap"):
-        self.percentiles = np.arange(0,100)*2*np.sqrt(np.mean(erp**2))#np.percentile(erp, np.arange(100))
+        self.percentiles = (
+            np.arange(0, 100) * 2 * np.sqrt(np.mean(erp**2))
+        )  # np.percentile(erp, np.arange(100))
         self.mode = mode
 
         # self.cb2 = ax.callbacks.connect("ylim_changed", self.setup)
@@ -78,7 +82,7 @@ class falling_leaf_plotter:
         )  # this locator puts ticks at regular intervals
         ax.xaxis.set_major_locator(loc)
 
-    def plot_main(self, mode, ax: Axes, erp, partial=True,clim=None):
+    def plot_main(self, mode, ax: Axes, erp, partial=True, clim=None):
         self.mode = mode
 
         ylim = ax.get_ylim()
@@ -91,7 +95,7 @@ class falling_leaf_plotter:
             im_data = erp
             xlim = [0, erp.shape[1]]
             ylim = [0, erp.shape[0]]
-        im_data=im_data
+        im_data = im_data
         if mode == "heatmap":
             if self.ax_track_leaf is not None:
                 try:
@@ -114,17 +118,14 @@ class falling_leaf_plotter:
                 cmap="gray_r",
                 interpolation="antialiased",
                 rolling_max=True,
+            )
 
-            )
-            
-            self.ax_track_cmap.set_data(
-                np.clip(im_data, 0, np.max(im_data))
-            )
+            self.ax_track_cmap.set_data(np.clip(im_data, 0, np.max(im_data)))
             self.ax_track_cmap.set_extent((xlim[0], xlim[1], ylim[1], ylim[0]))
             if clim is None:
                 clim = (self.percentiles[40], self.percentiles[95])
             self.ax_track_cmap.set_clim(*clim)
-            self.ax_track_cmap._scale_norm(None,None,None)
+            self.ax_track_cmap._scale_norm(None, None, None)
             ax.add_artist(self.ax_track_cmap)
             # self.ax_track_cmap.set_animated(True)
             # ax.draw_artist(self.ax_track_cmap)
@@ -133,7 +134,7 @@ class falling_leaf_plotter:
             if self.ax_track_cmap is not None:
                 self.ax_track_cmap.set_visible(False)
 
-            p90 = np.std(self.im_data)*10 #self.percentiles[95] * 4
+            p90 = np.std(self.im_data) * 10  # self.percentiles[95] * 4
             analog_signal_erp_norm = np.clip(
                 im_data,
                 -p90,
@@ -168,7 +169,6 @@ class falling_leaf_plotter:
             #     zorder=10,
             # )
 
-
     def highlight_stim(self, ax, stimNo, partial=True):
         if stimNo is None:
             return
@@ -183,7 +183,7 @@ class falling_leaf_plotter:
                 for x in range(len(ax_leaf_paths))
             ]
             self.ax_track_leaf.set_colors(new_colors)
-            #ax.draw_artist(self.ax_track_leaf)
+            # ax.draw_artist(self.ax_track_leaf)
             return self.ax_track_leaf
 
             # op: lines.Line2D = self.mainPlotter.ax_track_leaf[stimNo]
@@ -194,20 +194,20 @@ class falling_leaf_plotter:
             # self.hline.update_from(op)
             # self.hline.set_color("purple")
         else:
-            #self.hline.set_visible(True)
+            # self.hline.set_visible(True)
             if self.hline is not None:
                 try:
                     self.hline.remove()
                 except:
                     pass
             self.hline = ax.axhline(stimNo)
-            #self.hline.set_animated(True)
+            # self.hline.set_animated(True)
 
-            #ax.draw_artist(self.hline)
-            return self.hline    
+            # ax.draw_artist(self.hline)
+            return self.hline
 
     def plot_spikegroup(self, ax, sg, **kwargs):
-        kwargs = {"alpha":0.5, **kwargs}
+        kwargs = {"alpha": 0.5, **kwargs}
 
         points = np.array(
             [(x[0], i) for i, x in enumerate(sg.idx_arr) if x is not None]
@@ -216,9 +216,8 @@ class falling_leaf_plotter:
             return
         scat = ax.scatter(points[:, 0], points[:, 1], s=4, **kwargs)
         # scat.set_animated(True)
-        #ax.draw_artist(scat)
+        # ax.draw_artist(scat)
         return [scat]
-
 
 
 class MultiTraceView(QMainWindow):
@@ -261,7 +260,6 @@ class MultiTraceView(QMainWindow):
 
         self.gs = self.fig.add_gridspec(1, 2, width_ratios=[3, 1])
 
-        
         self.ax = self.fig.add_subplot(self.gs[0, 0])
         self.ax_right = []
         # self.ax_right_fig = self.fig.add_subfigure(self.gs[0,1])
@@ -347,11 +345,11 @@ class MultiTraceView(QMainWindow):
         self.settingsButton.clicked.connect(lambda: self.settingsDialog.show())
         self.rightPlots = {}
 
-        self.toggleMaxMeanButton = QPushButton("Show max",self)
+        self.toggleMaxMeanButton = QPushButton("Show max", self)
         self.toggleMaxMeanButton.setCheckable(True)
         self.toggleMaxMeanButton.clicked.connect(lambda: self.toggleMaxMean())
 
-        self.showMessages = QPushButton("Show messages",self)
+        self.showMessages = QPushButton("Show messages", self)
         self.showMessages.setCheckable(True)
         self.showMessages.clicked.connect(lambda: self.toggleShowMessages())
 
@@ -372,15 +370,15 @@ class MultiTraceView(QMainWindow):
         toolbar2.addWidget(heatmapRadio)
         toolbar2.addWidget(unitOnlyRadio)
         toolbar2.addSeparator()
-        
+
         toolbar2.addWidget(self.polySelectButton)
         toolbar2.addWidget(self.settingsButton)
         toolbar2.addWidget(self.toggleMaxMeanButton)
         toolbar2.addWidget(self.showMessages)
-        
+
         self.addToolBarBreak()
         self.addToolBar(Qt.TopToolBarArea, toolbar2)
-        #layout.addLayout(layout2)
+        # layout.addLayout(layout2)
         layout.addWidget(self.view)
         w = QWidget(self)
         w.setLayout(layout)
@@ -399,15 +397,14 @@ class MultiTraceView(QMainWindow):
         )  # useblit does not work (for unknown reasons)
         self.pg_selector.set_active(False)
         self.update_axis()
-        
 
         # @qsignal_throttle_wrapper(interval=33)
         # def draw_evt(evt):
         #     with self.fig.canvas.callbacks.blocked():
         #         # self.blit()
         #         self.render()
-        
-        #self.fig.canvas.mpl_connect("draw_event", draw_evt)
+
+        # self.fig.canvas.mpl_connect("draw_event", draw_evt)
         # self.ax.callbacks.connect("xlim_changed", draw_evt)
         # self.ax.callbacks.connect("ylim_changed", draw_evt)
 
@@ -417,7 +414,9 @@ class MultiTraceView(QMainWindow):
             lambda *args: self.toggle_polySelector(False)
         )
         self.dialogPolySelect.changeSelection.connect(
-            lambda x,y: self.pg_selector.set_w(int(self.state.analog_signal.sampling_rate * x / 1000))
+            lambda x, y: self.pg_selector.set_w(
+                int(self.state.analog_signal.sampling_rate * x / 1000)
+            )
         )
 
     def get_settings(self):
@@ -554,7 +553,9 @@ class MultiTraceView(QMainWindow):
 
         self.references.append(self.state.onStimNoChange.connect(self.update_ylim))
         self.references.append(
-            self.state.onStimNoChange.connect(lambda *args: self.plot_curstim_line(self.state.stimno))
+            self.state.onStimNoChange.connect(
+                lambda *args: self.plot_curstim_line(self.state.stimno)
+            )
         )
         self.references.append(
             self.state.onUnitChange.connect(lambda x: self.reset_right_axes_data())
@@ -564,7 +565,7 @@ class MultiTraceView(QMainWindow):
         # self.state.onUnitChange.connect(lambda x:self.reset_right_axes_data())
         self.reset_right_axes_data()
 
-    #@qsignal_throttle_wrapper(1000)
+    # @qsignal_throttle_wrapper(1000)
     def reset_right_axes_data(self):
         if self.state is None:
             return
@@ -600,16 +601,16 @@ class MultiTraceView(QMainWindow):
                         np.mean(self.state.get_erp(x, self.state.event_signal), axis=1),
                         np.arange(0, len(self.state.event_signal.times)),
                     )
-                    
+
             except:
                 pass
-        
+
         if not self.rightPlots:
             self.rightPlots = {k: True for k, v in self.right_ax_data.items()}
 
         if self.settingsDialog is not None:
             self.settingsDialog.destroy()
-            
+
         self.settingsDialog = DialogSignalSelect(options=self.rightPlots)
 
         def updateView(k, v):
@@ -620,6 +621,7 @@ class MultiTraceView(QMainWindow):
         self.settingsDialog.changeSelection.connect(updateView)
         self.plot_right_axis()
         self.view.draw_idle()
+
     def setup_figure(self):
         mode = self.mode
         if self.state is None:
@@ -629,9 +631,9 @@ class MultiTraceView(QMainWindow):
 
         # self.ax_right_fig.clear()
         erp = self.state.get_erp()
-        #erp = np.clip(erp, 0, np.max(erp))
+        # erp = np.clip(erp, 0, np.max(erp))
         self.std = np.std(erp)
-        #self.percentiles = self.percentiles = np.linspace(0,10,101)*np.std((erp - np.mean(erp)))#np.percentile(erp, np.arange(100))#np.percentile(erp[erp>0], np.arange(101))
+        # self.percentiles = self.percentiles = np.linspace(0,10,101)*np.std((erp - np.mean(erp)))#np.percentile(erp, np.arange(100))#np.percentile(erp[erp>0], np.arange(101))
         ylim = self.ax.get_ylim()
         xlim = self.ax.get_xlim()
         if self.plotter is not None:
@@ -647,21 +649,29 @@ class MultiTraceView(QMainWindow):
                 self.plotter.hline.remove()
             except:
                 pass
-            
+
         self.plotter.setup(
             self.ax, erp, sampling_rate=self.state.sampling_rate, mode=mode
         )
-        self.plotter.plot_main(mode=self.mode, ax=self.ax, erp=erp, partial=False,clim=(self.std*self.lowerSpinBox.value(), self.std*self.upperSpinBox.value()))
+        self.plotter.plot_main(
+            mode=self.mode,
+            ax=self.ax,
+            erp=erp,
+            partial=False,
+            clim=(
+                self.std * self.lowerSpinBox.value(),
+                self.std * self.upperSpinBox.value(),
+            ),
+        )
         self.ax.set_ylim(ylim)
         self.ax.set_xlim(xlim)
         self.ax.set_autoscale_on(False)
 
         self.view.update()
-        #self.blit()
+        # self.blit()
 
-        self.plotter.highlight_stim(self.ax,self.state.stimno)
+        self.plotter.highlight_stim(self.ax, self.state.stimno)
 
-        
         self.plot_spikegroups()
         # self.plot_curstim_line(self.state.stimno)
 
@@ -671,7 +681,7 @@ class MultiTraceView(QMainWindow):
         return [x for x in [self.ax_track_cmap, self.ax_track_leaf] if x is not None]
         # self.view.draw_idle()
 
-    #@qsignal_throttle_wrapper(1000)
+    # @qsignal_throttle_wrapper(1000)
     def plot_right_axis(self):
         for ax in self.ax_right:
             ax.remove()
@@ -692,7 +702,7 @@ class MultiTraceView(QMainWindow):
         ):
 
             self.ax_right.append(self.fig.add_subplot(gs00[0, i], sharey=self.ax))
-            if i>0:
+            if i > 0:
                 self.ax_right[i].tick_params(axis="y", labelleft=False)
             c = next(colorwheel)
             self.ax_right[i].plot(*data, label=label, color=c)
@@ -782,11 +792,11 @@ class MultiTraceView(QMainWindow):
         if self.points_spikegroups is None:
             pass  # TODO optimisation of setting x_data rather than replotting
         else:
-            #try:
+            # try:
             for x in self.points_spikegroups:
                 if x is not None:
                     x.remove()
-            #except:
+            # except:
             #    pass
         points_spikegroups = []
 
@@ -799,17 +809,17 @@ class MultiTraceView(QMainWindow):
             if len(points) == 0:
                 # self.view.draw_idle()
                 return
-            #scat = self.ax.scatter(points[:, 0], points[:, 1], s=10, **kwargs)
+            # scat = self.ax.scatter(points[:, 0], points[:, 1], s=10, **kwargs)
             points_spikegroups = []
             for point in points:
                 rect = matplotlib.patches.Rectangle(
-                    (point[0] - 5, point[1] ), 10, 1, **kwargs
+                    (point[0] - 5, point[1]), 10, 1, **kwargs
                 )
 
                 points_spikegroups.append(rect)
-            
-            #scat.set_animated(True)
-            #self.ax.draw_artist(scat)
+
+            # scat.set_animated(True)
+            # self.ax.draw_artist(scat)
             points_spikegroups = PatchCollection(points_spikegroups, **kwargs)
             self.ax.add_collection(points_spikegroups)
             return points_spikegroups
@@ -827,14 +837,16 @@ class MultiTraceView(QMainWindow):
                     continue
                 artists = plot(i, color=colors[i % len(colors)])
                 points_spikegroups.append(artists)
-                
+
         # bg = self.
         if self.includeUnitCheckbox.isChecked():
-            artists = plot(self.state.cur_spike_group, color="red", alpha=0.6 if self.mode=="heatmap" else 1)
+            artists = plot(
+                self.state.cur_spike_group,
+                color="red",
+                alpha=0.6 if self.mode == "heatmap" else 1,
+            )
             points_spikegroups.append(artists)
         self.points_spikegroups = points_spikegroups
-
-
 
         return self.points_spikegroups
 
@@ -842,24 +854,21 @@ class MultiTraceView(QMainWindow):
     def render(self):
 
         self.view.draw_idle()
-    
-        #self.fig.canvas.restore_region(self.blit_data)
-        #o = self.plot_curstim_line(self.state.stimno)
 
-       
+        # self.fig.canvas.restore_region(self.blit_data)
+        # o = self.plot_curstim_line(self.state.stimno)
+
         o2 = self.plot_spikegroups()
-        
+
         if self.pg_selector.active:
             self.pg_selector.set_visible(True)
-  
 
+            # self.pg_selector._draw_polygon()
 
-            #self.pg_selector._draw_polygon()
-            
-            #self.pg_selector.draw()
+            # self.pg_selector.draw()
 
         self.view.update()
-        #return  o2
+        # return  o2
         # try:
         #     self.ax.redraw_in_frame()
         # except:
@@ -875,11 +884,15 @@ class MultiTraceView(QMainWindow):
         if self.mode != "heatmap" or self.plotter.ax_track_cmap is None:
             pass
         else:
-            vmin = self.std * self.lowerSpinBox.value() #self.percentiles[self.lowerSpinBox.value()]
-            vmax = self.std*self.upperSpinBox.value() #self.percentiles[self.upperSpinBox.value()]
+            vmin = (
+                self.std * self.lowerSpinBox.value()
+            )  # self.percentiles[self.lowerSpinBox.value()]
+            vmax = (
+                self.std * self.upperSpinBox.value()
+            )  # self.percentiles[self.upperSpinBox.value()]
             self.plotter.ax_track_cmap.set_clim(
                 vmin,
-                max(vmin+0.001, vmax),
+                max(vmin + 0.001, vmax),
             )
             # self.ax_track_cmap.axes.draw_artist(self.ax_track_cmap)
             self.view.draw_idle()
@@ -903,22 +916,20 @@ class MultiTraceView(QMainWindow):
         i = next(
             i for i, e in enumerate(self.state.segment.events) if "log.other" == e.name
         )
-        
-        
 
         if self.showMessages.isChecked():
             self.showMessages.setText("Hide messages")
 
         else:
             self.showMessages.setText("Show messages")
-            #self.plotter.highlight_stim(self.ax, stimNo, partial=False)
-            
+            # self.plotter.highlight_stim(self.ax, stimNo, partial=False)
+
         self.toggle_plot_messages(self.state.segment.events[i])
         self.view.update()
         self.view.draw_idle()
         self.view.draw()
-    
-    def toggle_plot_messages(self,events):
+
+    def toggle_plot_messages(self, events):
         print("toggle_plot_messages")
         if self.messages is not None:
             for txt in self.messages:
@@ -926,12 +937,12 @@ class MultiTraceView(QMainWindow):
             self.messages = None
         else:
             messages = []
-            for i,t in enumerate(events):
-                yy = self.state.event_signal.times.searchsorted(t, 'right') - 1 
+            for i, t in enumerate(events):
+                yy = self.state.event_signal.times.searchsorted(t, "right") - 1
                 xx = 0
                 ss = events.array_annotations["message"][i]
-                messages.append(self.ax.text(xx,yy,ss))
-                
+                messages.append(self.ax.text(xx, yy, ss))
+
             self.messages = messages
 
     def __del__(self):
@@ -941,28 +952,32 @@ class MultiTraceView(QMainWindow):
 
 
 import matplotlib.patches
+
+
 class LineSelector(PolygonSelector):
     # self.outerlines = None
     # def calculate_hits
-    def __init__(self, *args, w=1000, **kwargs): 
+    def __init__(self, *args, w=1000, **kwargs):
         self._selection_window = matplotlib.patches.Polygon(
             [(0, 0)], closed=False, edgecolor="purple", facecolor="none"
         )
         self.w = w
- 
+
         super().__init__(*args, **kwargs)
         self.ax.add_patch(self._selection_window)
-    
+
     def set_w(self, w):
         self.w = w
         self._draw_polygon()
-    @property   
+
+    @property
     def artists(self):
         others = super().artists
-        return  others + (self._selection_window,)
+        return others + (self._selection_window,)
 
     def set_visible(self, visible):
         return super().set_visible(visible)
+
     def clear(self):
         super().clear()
         self._selection_window.set_visible(False)
@@ -983,7 +998,6 @@ class LineSelector(PolygonSelector):
         if len(xys) < 2:
             return
 
-        
         # #Calculate the perpendicular offsets for the polygon
         # dx = np.diff(xys[:, 0])
         # dy = np.diff(xys[:, 1])
@@ -992,17 +1006,16 @@ class LineSelector(PolygonSelector):
         # ny = dx / length   # Normalized perpendicular vector (y-component)
 
         # Create the upper and lower edges of the polygon
-        upper = xys + np.array([w/2,0])
-        lower = xys - np.array([w/2,0]) 
+        upper = xys + np.array([w / 2, 0])
+        lower = xys - np.array([w / 2, 0])
         lower = lower[::-1]  # Reverse the lower edge to close the polygon
 
         # Combine the edges to form the polygon
-        poly_points = np.vstack([upper, lower, upper[0]]) 
+        poly_points = np.vstack([upper, lower, upper[0]])
         if self._selection_window is None:
             self._selection_window = matplotlib.patches.Polygon(
                 poly_points, closed=True, edgecolor="purple", alpha=0.5
             )
-
 
         self._selection_window.set_xy(poly_points)
 
