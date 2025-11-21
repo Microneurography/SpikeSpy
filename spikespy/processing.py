@@ -177,6 +177,7 @@ class MultiAnalogSignal:
     @property
     def times(self):
         return np.concatenate([x.times for x in self.signals])
+
     @property
     def sampling_period(self):
         """
@@ -190,6 +191,7 @@ class MultiAnalogSignal:
 from neo import Event
 import quantities as pq
 import warnings
+
 
 # function to create multianalogsignal like erp
 def create_neo_multianalogsignal(

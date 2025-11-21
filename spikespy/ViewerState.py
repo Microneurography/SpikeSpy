@@ -24,6 +24,9 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QDialogButtonBox,
     QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 from functools import lru_cache
 from neo.core.objectlist import ObjectList
@@ -166,7 +169,6 @@ class tracked_neuron_unit:
         return p
 
 
-
 class ViewerState(QObject):
     onLoadNewFile = Signal()
     onUnitChange = Signal(int)
@@ -292,8 +294,10 @@ class ViewerState(QObject):
                         newEvents.append(x)
                         break
 
-            event = Event(np.array(newEvents) * pq.s,**old_evt.annotations, name=old_evt.name)
-            #TODO: this does not maintain array_annotations.
+            event = Event(
+                np.array(newEvents) * pq.s, **old_evt.annotations, name=old_evt.name
+            )
+            # TODO: this does not maintain array_annotations.
         self.spike_groups[self.cur_spike_group].event = event
         del self.spike_groups[self.cur_spike_group].idx_arr
         self.update_idx_arrs()
@@ -335,7 +339,9 @@ class ViewerState(QObject):
 
     def removeUnitGroup(self, unit):
         spike_groups = self.spike_groups
-        self.spike_groups = [x for i, x in enumerate(spike_groups) if x.event.name != unit.event.name]
+        self.spike_groups = [
+            x for i, x in enumerate(spike_groups) if x.event.name != unit.event.name
+        ]
         self.update_idx_arrs()
         self.save_undo(
             lambda: self.set_data(
@@ -344,15 +350,14 @@ class ViewerState(QObject):
         )
         self.onUnitGroupChange.emit()
 
-
     @Slot()
     def addUnitGroup(self):
         evt = Event()
         nom = f"unit"
         x = len(self.spike_groups)
-        while(f"{nom}_{x}" in [sg.event.name for sg in self.spike_groups]):
-            x+= 1
-        evt.name =f"{nom}_{x}" 
+        while f"{nom}_{x}" in [sg.event.name for sg in self.spike_groups]:
+            x += 1
+        evt.name = f"{nom}_{x}"
         evt.annotations["type"] = "unit"
         evt.annotations["unit"] = len(self.spike_groups)
         evt.annotations["notes"] = ""
@@ -435,8 +440,6 @@ class ViewerState(QObject):
         # )
         return erp
 
-   
-
     _peaks = None
 
     def get_peaks(self):
@@ -458,13 +461,13 @@ class ViewerState(QObject):
         self.window_size = window_size * pq.ms
         self._get_erp.cache_clear()
         self.onLoadNewFile.emit()
-    
+
     def get_unit_suggestions(self):
         # This will return a list of event suggestions provided by all the activated UnitSuggestion providers
         # This allows for custom algorithms to be implemented
         # The first one in the list will be the selected default.
         pass
-    
+
     def set_data(
         self,
         analog_signal=None,
@@ -568,11 +571,24 @@ def load_file(data_path, type="h5", **kwargs):
     elif type == "APTrack":
         d = APTrackDialog()
         val = d.exec_()
-
         config = d.get_config()
         t = config.pop("record")
 
-        # HACK: Add DS4 channels
+        # skip the predicted items so we don't duplicate them
+        skip_list = ["rd.0", "rd.0.bp", "stimVolt", "stim"]
+        additional_channels = []
+        for k, v in config.items():
+            if any(k in x for x in skip_list):
+                continue
+
+            extra_channel = APTrackRecording(
+                v,
+                TypeID.ANALOG,
+                k,
+                "",
+            )
+            additional_channels.append(extra_channel)
+
         DS4_channels = [
             APTrackRecording(
                 "ADC2",
@@ -588,7 +604,7 @@ def load_file(data_path, type="h5", **kwargs):
             ),
         ]
 
-        data = open_aptrack(data_path, t, config, DS4_channels)
+        data = open_aptrack(data_path, t, config, additional_channels)
         # blk = neo.OpenEphysIO(data_path).read_block(0)
         # data = blk.segments[0]
     elif type == "spike2":
@@ -652,11 +668,11 @@ def prompt_for_neo_file(type):
         raise Exception(f"Unknown filetype: {type}")
     return fname, type
 
+
 def get_predicted_aps(self):
     """
     look at action potential predictors and return the predicted action potentials
     """
-
 
 
 def open_matlab_to_neo(folder):
@@ -677,12 +693,14 @@ def open_matlab_to_neo(folder):
         seg.analogsignals.append(asig)
     return seg
 
-class APPredictor():
+
+class APPredictor:
     def __init__(self, state: ViewerState):
         self.state = state
         self.state.onLoadNewFile.connect(self.update)
         self.state.onUnitGroupChange.connect(self.update)
         self.state.onUnitChange.connect(self.update)
+
     def update(self):
         # return an event signal with the predicted action potentials
         pass
@@ -691,37 +709,86 @@ class APPredictor():
 class APTrackDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setWindowTitle("Load APTrack Data")
 
-        self.layout = QFormLayout()
-        self.setLayout(self.layout)
+        self.bottomLayout = QFormLayout()
+        self.topLayout = QFormLayout()
+        self.mainLayout = QVBoxLayout()
 
-        self.layout.addRow(QLabel("custom parameters"))
+        self.topLayout.addRow(QLabel("custom parameters"))
         self.sbRecordNumber = QSpinBox()
         self.sbRecordNumber.setMinimum(0)
 
-        self.layout.addRow(QLabel("recording"), self.sbRecordNumber)
+        self.inputsConfig = {}
+        self.labelBoxes = []
+        self.inputBoxes = []
+
+        self.topLayout.addRow(QLabel("Rec#"), self.sbRecordNumber)
+
+        labelBox = QLabel("Rec. channel")
+        inputBox = QLineEdit("CH1")
+        self.topLayout.addRow(labelBox, inputBox)
+        self.labelBoxes.append(labelBox)
+        self.inputBoxes.append(inputBox)
+
+        labelBox = QLabel("Stimulus ch.")
+        inputBox = QLineEdit("ADC2")
+        self.topLayout.addRow(labelBox, inputBox)
+        self.labelBoxes.append(labelBox)
+        self.inputBoxes.append(inputBox)
+
         config = {
-            "rd.0": "CH1",
-            "stimVolt": "ADC4",
-            "stim": "ADC5",
-            "thermode": "ADC7",
+            # "rd.0": "CH1",
+            # "stimVolt": "ADC2", # strictly necessary
+            # "stim": "ADC5",
+            # "thermode": "ADC7",
             "button": "ADC8",
         }
-        self.inputsConfig = {}
         for k, v in config.items():
+            labelBox = QLineEdit(k)
             inputBox = QLineEdit(v)
+            self.labelBoxes.append(labelBox)
+            self.inputBoxes.append(inputBox)
+            self.topLayout.addRow(labelBox, inputBox)
 
-            self.inputsConfig[k] = inputBox
-            self.layout.addRow(QLabel(k), inputBox)
+        self.addButton = QPushButton("+")
+        self.addButton.clicked.connect(self.addWidget)
+        self.removeButton = QPushButton("-")
+        self.removeButton.clicked.connect(self.removeWidget)
+
+        self.bottomLayout.addRow(self.addButton, self.removeButton)
+
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.layout.addRow(self.buttons)
+        self.bottomLayout.addRow(self.buttons)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
+
+        self.mainLayout.addLayout(self.topLayout)
+        self.mainLayout.addLayout(self.bottomLayout)
+        self.setLayout(self.mainLayout)
 
     def get_config(self):
         config = {}
         config["record"] = self.sbRecordNumber.value()
-        for k, v in self.inputsConfig.items():
-            config[k] = v.text()
+        config["rd.0"] = self.inputBoxes[0].text()
+        config["stimVolt"] = self.inputBoxes[1].text()
+
+        for i in range(len(self.inputBoxes) - 2):
+            config[self.labelBoxes[i + 2].text()] = self.inputBoxes[i + 2].text()
 
         return config
+
+    def addWidget(self):
+        # TODO: inputs config will break with this method
+        labelBox = QLineEdit("new_input")
+        inputBox = QLineEdit("ADC8")
+        self.topLayout.addRow(labelBox, inputBox)
+        self.labelBoxes.append(labelBox)
+        self.inputBoxes.append(inputBox)
+
+    def removeWidget(self):
+        if self.topLayout.rowCount() < 5:
+            return
+        self.topLayout.removeRow(self.topLayout.rowCount() - 1)
+        self.labelBoxes.pop()
+        self.inputBoxes.pop()

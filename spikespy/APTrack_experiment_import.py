@@ -385,6 +385,9 @@ def process_folder(
         rex += ".continuous"
 
         matches = [x for x in all_files if len(re.findall(rex, str(x.name))) == 1]
+        if len(matches) == 0:
+            logging.warning(f"did not find channel: {chname}")
+            return None
         return matches[0]
 
     if config is None:
@@ -405,7 +408,7 @@ def process_folder(
             "A TTL of the stimulation voltage",
         ),
         APTrackRecording(
-            find_channel(config.get("stim", "ADC5")),
+            find_channel(config.get("stimVolt", "ADC4")),
             TypeID.TTL,
             "env.stim",
             "A TTL of the stimulation",
@@ -435,6 +438,7 @@ def process_folder(
             "Manual button press, usually to signify a change in protocol or mechanical stimulation",
         ),
     ]
+    signals = [x for x in signals if x.filename is not None]
     for aprec in extra_channels:
         if not (Path(aprec.filename).exists()):
             aprec.filename = find_channel(aprec.filename)
@@ -443,6 +447,7 @@ def process_folder(
     messages = Path(foldername) / (
         "messages" + (f"_{record_no}" if record_no > 1 else "") + ".events"
     )
+
     neo = as_neo(
         signals, str(messages) if messages.exists() else None, record_no=record_no
     )

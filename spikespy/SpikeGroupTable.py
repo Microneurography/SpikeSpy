@@ -47,10 +47,10 @@ class SpikeGroupTableView(QWidget):
         state.onUnitChange.connect(self.update)
         state.onUnitGroupChange.connect(self.update)
         state.onLoadNewFile.connect(self.update)
-        
+
         self.tbl.setSelectionBehavior(QTableView.SelectRows)
-        #self.tbl.setSelectionMode(QAbstractItemView.SingleSelection)
-        #self.tbl.setStyleSheet("QTableView::item:selected { background: #a0c4ff; }")
+        # self.tbl.setSelectionMode(QAbstractItemView.SingleSelection)
+        # self.tbl.setStyleSheet("QTableView::item:selected { background: #a0c4ff; }")
 
         # Use standard icons for add/remove if available
         style = self.style()
@@ -70,7 +70,6 @@ class SpikeGroupTableView(QWidget):
         self.removeButton.clicked.connect(self.remove_selected_row)
         button_layout.addWidget(self.removeButton)
         button_layout.addWidget(self.addButton)
-        
 
         vlayout = QVBoxLayout()
         vlayout.addWidget(self.tbl)
@@ -78,7 +77,9 @@ class SpikeGroupTableView(QWidget):
         self.setLayout(vlayout)
 
         self.tbl.selectionModel().selectionChanged.connect(self.set_selection)
-        self.tbl.setItemDelegateForColumn(4, ComboBoxDelegate(self, ["cm","ch","cmh","cmihi","cmih"]))
+        self.tbl.setItemDelegateForColumn(
+            4, ComboBoxDelegate(self, ["cm", "ch", "cmh", "cmihi", "cmih"])
+        )
 
         self.addButton.clicked.disconnect()
         self.addButton.clicked.connect(self.add_row_and_select)
@@ -88,11 +89,13 @@ class SpikeGroupTableView(QWidget):
     def update(self):
         self.spike_tablemodel.update()
         # Ensure the correct row is selected as per state
-        current_group = self.state.getUnitGroup() 
+        current_group = self.state.getUnitGroup()
         if current_group is not None:
             # Find the row corresponding to the current unit group
             for row in range(self.tbl.model().rowCount()):
-                sg = self.tbl.model().data(self.tbl.model().index(row, 0), role="SPIKEGROUP_ROLE")
+                sg = self.tbl.model().data(
+                    self.tbl.model().index(row, 0), role="SPIKEGROUP_ROLE"
+                )
                 if sg.event.name == current_group.event.name:
                     self.tbl.selectionModel().blockSignals(True)
                     self.tbl.selectRow(row)
@@ -117,10 +120,11 @@ class SpikeGroupTableView(QWidget):
         selection = self.tbl.selectionModel().selectedRows()
         if selection:
             row = selection[0].row()
-            sg = self.tbl.model().data(self.tbl.model().index(row, 0), role="SPIKEGROUP_ROLE")
+            sg = self.tbl.model().data(
+                self.tbl.model().index(row, 0), role="SPIKEGROUP_ROLE"
+            )
 
             self.state.removeUnitGroup(sg)
-     
 
     def add_row_and_select(self):
         self.state.addUnitGroup()
@@ -158,7 +162,6 @@ class ComboBoxDelegate(QStyledItemDelegate):
 
         return combo
 
-
     def setEditorData(self, editor, index):
         value = index.model().data(index, Qt.DisplayRole)
         editor.setCurrentText(value)
@@ -172,11 +175,18 @@ class SpikeGroupTableModel(QAbstractTableModel):
         """
         spikegroups_func is a functino which returns the spike groups
         """
-        QAbstractTableModel.__init__(self,)
+        QAbstractTableModel.__init__(
+            self,
+        )
         self.spikegroups_func = spikegroups_func
         self.spikegroups = self.spikegroups_func()
         self.headers = ["SpikeID", "start", "end"]
-        self.annotations_to_show = {'notes': "notes",  "fibre class":"fibre_type", "thermal":"thermal_response","mechanical":'mechanical_response'}
+        self.annotations_to_show = {
+            "notes": "notes",
+            "fibre class": "fibre_type",
+            "thermal": "thermal_response",
+            "mechanical": "mechanical_response",
+        }
         self.headers += list(self.annotations_to_show.keys())
 
     def rowCount(self, parent=QModelIndex()):
@@ -217,15 +227,17 @@ class SpikeGroupTableModel(QAbstractTableModel):
                 if sg.get_window() is None:
                     return ""
                 return sg.get_window()[column - 1]
-            elif column >=3:
-                return sg.event.annotations.get(self.annotations_to_show[self.headers[column]])
+            elif column >= 3:
+                return sg.event.annotations.get(
+                    self.annotations_to_show[self.headers[column]]
+                )
 
             else:
                 return ""
         elif role == "SPIKEGROUP_ROLE":
             return sg
-        #elif role == Qt.BackgroundRole:
-            #return QColor(Qt.white)
+        # elif role == Qt.BackgroundRole:
+        # return QColor(Qt.white)
 
     def setData(
         self,
@@ -237,10 +249,12 @@ class SpikeGroupTableModel(QAbstractTableModel):
             column = index.column()
             row = index.row()
             sg = self.spikegroups_func()[row]
-            if column>=3:
-                sg.event.annotations[self.annotations_to_show[self.headers[column]]] = value
+            if column >= 3:
+                sg.event.annotations[self.annotations_to_show[self.headers[column]]] = (
+                    value
+                )
                 self.dataChanged.emit(index, index)
-                
+
                 return True
 
         return False
@@ -250,8 +264,6 @@ class SpikeGroupTableModel(QAbstractTableModel):
         if index.column() >= 3:  # fibre class
             flags |= Qt.ItemIsEditable
         return flags
-
-
 
 
 if __name__ == "__main__":

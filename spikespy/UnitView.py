@@ -46,7 +46,7 @@ class UnitView(QMatplotlib):
         parent: PySide6.QtWidgets.QWidget = None,
         state: ViewerState = None,
     ):
-        
+
         self.axes = None
         self.w = None
         self.selected_line = None
@@ -72,7 +72,6 @@ class UnitView(QMatplotlib):
         self.state.onUnitGroupChange.connect(self.updateAll)
         self.state.onLoadNewFile.connect(self.updateAll)
 
-
     @Slot()
     def updateAll(self):
         self.figure.clear()
@@ -89,7 +88,6 @@ class UnitView(QMatplotlib):
             xarr, np.zeros(len(xarr)), color="purple", zorder=10, animated=True
         )[0]
 
-
         ax.axvline(0, ls="--", color="black")
 
         sg = self.state.getUnitGroup()
@@ -103,8 +101,8 @@ class UnitView(QMatplotlib):
                 continue
             w = [-self.w, self.w]
             xmin = idx[0] - self.w
-            if xmin <0:
-                w[0] = abs(xmin)+1
+            if xmin < 0:
+                w[0] = abs(xmin) + 1
                 xmin = 0
 
             xmax = idx[0] + self.w
@@ -112,10 +110,10 @@ class UnitView(QMatplotlib):
                 w[1] = abs(xmax - len(d))
                 xmax = len(d)
 
-            ydata = d[ xmin:xmax]
+            ydata = d[xmin:xmax]
             try:
-                mean_arr[w[0]+self.w:w[1]+self.w] += ydata
-                self.lines[i] = np.vstack((np.arange(w[0],w[1]), ydata)).T
+                mean_arr[w[0] + self.w : w[1] + self.w] += ydata
+                self.lines[i] = np.vstack((np.arange(w[0], w[1]), ydata)).T
             except:
                 pass
             ylims[0] = min(ylims[0], np.min(ydata))
@@ -124,7 +122,13 @@ class UnitView(QMatplotlib):
         from matplotlib.collections import LineCollection
 
         lc = LineCollection(self.lines.values(), alpha=0.3, color="gray")
-        self.mean_line = ax.plot(np.arange(-self.w, self.w), mean_arr/len(self.lines), ls="--", color="black", zorder=10)[0]
+        self.mean_line = ax.plot(
+            np.arange(-self.w, self.w),
+            mean_arr / len(self.lines),
+            ls="--",
+            color="black",
+            zorder=10,
+        )[0]
         ax.add_artist(lc)
         ax.set_ylim(ylims)
 
@@ -145,8 +149,9 @@ class UnitView(QMatplotlib):
             self.selected_line.set_visible(True)
             self.axes["main"].draw_artist(self.selected_line)
         self.canvas.update()
+
     def draw_figure(self):
-        pass#return super().draw_figure()
+        pass  # return super().draw_figure()
 
     def on_click(self, event):
         if event.inaxes != self.axes["main"]:
@@ -177,7 +182,7 @@ class UnitView(QMatplotlib):
                     t = max(0, min(1, np.dot(point_vec, line_vec) / line_len))
                     projection = p1 + t * line_vec
                     dist = np.linalg.norm(np.array([xdata, ydata]) - projection)
-                
+
                 if dist < closest_dist:
                     closest_dist = dist
                     closest_line = i
@@ -185,5 +190,6 @@ class UnitView(QMatplotlib):
             self.state.setStimNo(closest_line)
 
         return super().on_click(event)
+
     def keyPressEvent(self, event: PySide6.QtGui.QKeyEvent) -> None:
         return self.parentWidget().keyPressEvent(event)

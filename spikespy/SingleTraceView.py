@@ -502,21 +502,54 @@ class SingleTraceView(QMainWindow):
                 return
 
             x += np.argmax(np.abs(dpts[x - w : x + w])) - w
-
+        # print("set_cur_pos")
+        # print(x)
         self.state.setUnit(x)
 
     def keyPressEvent(self, e):
-        if e.key() == Qt.Key_N:
-            self.state.setUnit(self.closest_pos)
-        elif e.key() == Qt.Key_Z:
+        if (
+            e.key() == Qt.Key_N or e.key() == Qt.Key_Space
+        ):  # add a new spike where we last had one
+            # print("N KEY or SPACE KEY")
+            cur_event_time = self.state.event_signal.times[self.state.stimno]
+            sg = self.state.getUnitGroup()
+            cur_lat = sg.get_latencies(
+                np.array([cur_event_time]) * cur_event_time.units
+            )[0].rescale("s")
+            if cur_lat != np.nan and cur_lat < self.state.window_size:
+                # cursor already on the screen, why do you want to copy the last one?
+                return
+
+            for i in range(5):
+                prev_event_time = self.state.event_signal.times[
+                    self.state.stimno - i - 1
+                ]
+
+                sg = self.state.getUnitGroup()
+                prv_lat = sg.get_latencies(
+                    np.array([prev_event_time]) * prev_event_time.units
+                )[0].rescale("s")
+                cur_point = int(prv_lat * self.state.sampling_rate)
+
+                if cur_point != np.nan and prv_lat < self.state.window_size:
+                    self.set_cur_pos(cur_point)
+                    self.fig.canvas.draw_idle()
+                    break
+
+        elif e.key() == Qt.Key_Z:  # Although the zoom works, it can't be undone...
+            # print("Z KEY")
             # get current spike location
             spike_ts = (
                 self.state.getUnitGroup()
-                .get_latencies([self.state.event_signal[self.state.stimno]])[0]
+                .get_latencies(
+                    [self.state.event_signal[self.state.stimno].magnitude]
+                    * self.state.event_signal.units
+                )[0]
                 .rescale("s")
             )
             if spike_ts == np.nan or spike_ts > self.state.window_size:
                 return
+            # set the xlim to 5 ms before and after spike
             self.ax.set_xlim(spike_ts.magnitude - 0.005, spike_ts.magnitude + 0.005)
 
             e = self.state.event_signal[self.state.stimno]
@@ -525,7 +558,7 @@ class SingleTraceView(QMainWindow):
                 self.state.analog_signal.time_slice(
                     e + spike_ts - (2 * pq.ms), e + spike_ts + (2 * pq.ms)
                 )
-                .rescale(pq.mV)
+                # .rescale(pq.mV)
                 .magnitude
             )
             min_val = np.min(vals)
@@ -539,6 +572,7 @@ class SingleTraceView(QMainWindow):
             and (e.modifiers() & Qt.ShiftModifier)
             and self.conv is not None
         ):
+            # print("SHIFT + LEFT/RIGHT KEY")
             cur_stimpos = self.state.getUnitGroup().idx_arr[self.state.stimno][0]
             conv_high = np.percentile(self.conv[self.state.stimno][1000:-1000], 99)
             idx, _ = find_peaks(self.conv[self.state.stimno], conv_high)
@@ -557,6 +591,54 @@ class SingleTraceView(QMainWindow):
                 return
 
             self.state.setUnit(idx[closest_idx])
+        elif e.key() == Qt.Key_BracketLeft:  # Zoom out
+            # print("[ KEY")
+            # get current xlim & ylim
+            x_limits = [self.ax.get_xlim()[0], self.ax.get_xlim()[1]]
+            y_limits = [self.ax.get_ylim()[0], self.ax.get_ylim()[1]]
+
+            # calculate new limits
+            midline = np.mean(x_limits)
+            new_x_limits = [
+                midline - (midline - x_limits[0]) * 1.2,
+                midline + (x_limits[1] - midline) * 1.2,
+            ]
+
+            midline = np.mean(y_limits)
+            new_y_limits = [
+                midline - (midline - y_limits[0]) * 1.2,
+                midline + (y_limits[1] - midline) * 1.2,
+            ]
+
+            # increase the lims to 120%
+            self.ax.set_xlim(new_x_limits[0], new_x_limits[1])
+            self.ax.set_ylim(new_y_limits[0], new_y_limits[1])
+
+            self.fig.canvas.draw_idle()
+        elif e.key() == Qt.Key_BracketRight:  # Zoom in
+            # print("] KEY")
+            # get current xlim & ylim
+            x_limits = [self.ax.get_xlim()[0], self.ax.get_xlim()[1]]
+            y_limits = [self.ax.get_ylim()[0], self.ax.get_ylim()[1]]
+
+            # calculate new limits
+            midline = np.mean(x_limits)
+            new_x_limits = [
+                midline - (midline - x_limits[0]) * 0.8,
+                midline + (x_limits[1] - midline) * 0.8,
+            ]
+
+            midline = np.mean(y_limits)
+            new_y_limits = [
+                midline - (midline - y_limits[0]) * 0.8,
+                midline + (y_limits[1] - midline) * 0.8,
+            ]
+
+            # deccrease the lims to 80%
+            self.ax.set_xlim(new_x_limits[0], new_x_limits[1])
+            self.ax.set_ylim(new_y_limits[0], new_y_limits[1])
+
+            self.fig.canvas.draw_idle()
 
 
 if __name__ == "__main__":

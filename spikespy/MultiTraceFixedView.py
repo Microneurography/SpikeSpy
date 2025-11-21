@@ -34,7 +34,7 @@ class MultiTraceFixedView(QMatplotlib):
         if self.get_settings().get("scale") is None:
             erp = self.state.get_erp()
             ylim = np.std(np.abs(erp)) * 8
-            self.settings["scale"] = 1 / ylim
+            self.settings["scale"] = np.round(1 / ylim, decimals=4)
 
     def onLoadNewFile(self):
         super().onLoadNewFile()
@@ -58,6 +58,7 @@ class MultiTraceFixedView(QMatplotlib):
         scale_spinner.valueChanged.connect(
             lambda value: self.set_settings({"scale": value}, update_spinners=False)
         )
+        scale_spinner.setMinimumSize(100, 1)
         self.scale_spinner = scale_spinner
 
         scale_layout.addWidget(scale_label)
@@ -71,6 +72,7 @@ class MultiTraceFixedView(QMatplotlib):
                 {"n_lines_pre": value}, update_spinners=False
             )
         )
+        pre_spinner.setMinimumSize(100, 1)
         self.pre_spinner = pre_spinner
 
         post_label = QLabel("Post:")
@@ -82,6 +84,7 @@ class MultiTraceFixedView(QMatplotlib):
                 {"n_lines_post": value}, update_spinners=False
             )
         )
+        post_spinner.setMinimumSize(100, 1)
         self.post_spinner = post_spinner
 
         scale_layout.addWidget(pre_label)
@@ -236,7 +239,7 @@ class TestMultiLinePlot(QMainWindow):
     def __init__(self, state: ViewerState, rate=5000):
         super().__init__()
         self.viewer_state = state
-        self.plot = MultiLinePlot(self.viewer_state)
+        self.plot = []  # MultiLinePlot(self.viewer_state)
         self.setCentralWidget(self.plot)
         self.stimno = 200
 
