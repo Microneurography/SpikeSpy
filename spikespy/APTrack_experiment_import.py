@@ -385,11 +385,14 @@ def process_folder(
         rex += ".continuous"
 
         matches = [x for x in all_files if len(re.findall(rex, str(x.name))) == 1]
+        if len(matches) == 0:
+            logging.warning(f"did not find channel: {chname}")
+            return None
         return matches[0]
 
     if config is None:
         config = {}
-
+    
     signals = [
         APTrackRecording(
             find_channel(config.get("rd.0", "CH1")),
@@ -410,25 +413,32 @@ def process_folder(
             "env.stim",
             "A TTL of the stimulation",
         ),
-        # APTrackRecording(
-        #     find_channel(config.get("stimVolt_pot", "ADC2")),
-        #     TypeID.ANALOG,
-        #     "env.potentiometer",
-        #     "A TTL of the stimulation voltage",
-        # ),
-        # APTrackRecording(
-        #     find_channel(config.get("thermode", "ADC7")),
-        #     TypeID.ANALOG,
-        #     "env.thermode",
-        #     "Thermal stimulation temperatures",
-        # ),
-        # APTrackRecording(
-        #     find_channel(config.get("button", "ADC8")),
-        #     TypeID.TTL,
-        #     "rec.button",
-        #     "Manual button press, usually to signify a change in protocol or mechanical stimulation",
-        # ),
+        APTrackRecording(
+            find_channel(config.get("stimVolt_pot", "ADC2")),
+            TypeID.ANALOG,
+            "env.potentiometer",
+            "A TTL of the stimulation voltage",
+        ),
+        APTrackRecording(
+            find_channel(config.get("stim", "ADC5")),
+            TypeID.ANALOG,
+            "env.stim",
+            "A TTL of the stimulation",
+        ),
+        APTrackRecording(
+            find_channel(config.get("thermode", "ADC7")),
+            TypeID.ANALOG,
+            "env.thermode",
+            "Thermal stimulation temperatures",
+        ),
+        APTrackRecording(
+            find_channel(config.get("button", "ADC8")),
+            TypeID.TTL,
+            "rec.button",
+            "Manual button press, usually to signify a change in protocol or mechanical stimulation",
+        ),
     ]
+    signals = [x for x in signals if x.filename is not None]
     for aprec in extra_channels:
         if not (Path(aprec.filename).exists()):
             aprec.filename = find_channel(aprec.filename)
