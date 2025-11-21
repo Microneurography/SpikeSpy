@@ -722,10 +722,10 @@ class InfoDialog(QDialog):
 
 
 def export_csv(save_filename, unit_evts, stim_evt):
-    with open(save_filename, "w") as f:
+    with open(save_filename, "w", newline="") as f:
         w = writer(f)
         # self.state.segment
-        w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
+        w.writerow(["SpikeID", "Stimulus_number", "Latency_ms", "Timestamp_ms"])
         for i, sg in enumerate(unit_evts):
             nom = sg.name
             if nom is None or nom == "":
