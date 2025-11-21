@@ -875,7 +875,6 @@ class MultiTraceView(QMainWindow):
                 artists = plot(i, color=colors[i % len(colors)])
                 points_spikegroups.append(artists)
             self.legend = legend
-            print("end")
             print(self.legend)
 
         # bg = self.
@@ -970,7 +969,6 @@ class MultiTraceView(QMainWindow):
         self.view.draw()
 
     def toggle_plot_messages(self, events):
-        print("toggle_plot_messages")
         if self.messages is not None:
             for txt in self.messages:
                 txt.remove()
