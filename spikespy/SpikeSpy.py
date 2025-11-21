@@ -367,6 +367,16 @@ class MdiView(QMainWindow):
         for i, x in enumerate(self.shortcut_numbers):
             x.activated.connect(lambda i=i: self.state.setUnitGroup(i))
 
+        def add_select_new_unit():
+            self.state.addUnitGroup()
+            x = len(self.state.spike_groups)
+            self.state.setUnitGroup(x - 1)
+
+        self.shortcut_new_unit = QShortcut(
+            QKeySequence(Qt.CTRL | Qt.Key_N), self, context=Qt.ApplicationShortcut
+        )
+        self.shortcut_new_unit.activated.connect(add_select_new_unit)
+
         def toggle_snap():
             self.move_mode = None if self.move_mode == "snap" else "snap"
 
