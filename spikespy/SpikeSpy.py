@@ -367,6 +367,16 @@ class MdiView(QMainWindow):
         for i, x in enumerate(self.shortcut_numbers):
             x.activated.connect(lambda i=i: self.state.setUnitGroup(i))
 
+        def add_select_new_unit():
+            self.state.addUnitGroup()
+            x = len(self.state.spike_groups)
+            self.state.setUnitGroup(x - 1)
+
+        self.shortcut_new_unit = QShortcut(
+            QKeySequence(Qt.CTRL | Qt.Key_N), self, context=Qt.ApplicationShortcut
+        )
+        self.shortcut_new_unit.activated.connect(add_select_new_unit)
+
         def toggle_snap():
             self.move_mode = None if self.move_mode == "snap" else "snap"
 
@@ -712,10 +722,10 @@ class InfoDialog(QDialog):
 
 
 def export_csv(save_filename, unit_evts, stim_evt):
-    with open(save_filename, "w") as f:
+    with open(save_filename, "w", newline="") as f:
         w = writer(f)
         # self.state.segment
-        w.writerow(["SpikeID", "Stimulus_number", "Latency (ms)", "Timestamp(ms)"])
+        w.writerow(["SpikeID", "Stimulus_number", "Latency_ms", "Timestamp_ms"])
         for i, sg in enumerate(unit_evts):
             nom = sg.name
             if nom is None or nom == "":

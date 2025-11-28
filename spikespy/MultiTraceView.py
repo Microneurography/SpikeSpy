@@ -240,6 +240,7 @@ class MultiTraceView(QMainWindow):
         self.figcache = None
         self.references = []
         self.messages = None
+        self.legend = None
 
         # throttle the update for upateAll to every 500ms when using the comboboxes.
         self.update_timer = QTimer()
@@ -353,6 +354,10 @@ class MultiTraceView(QMainWindow):
         self.showMessages.setCheckable(True)
         self.showMessages.clicked.connect(lambda: self.toggleShowMessages())
 
+        self.showLegend = QPushButton("Show legend", self)
+        self.showLegend.setCheckable(True)
+        self.showLegend.clicked.connect(lambda x: self.render())
+
         toolbar2 = QToolBar("Controls", self)
         toolbar2.addWidget(QLabel("Colour scale (std): "))
         toolbar2.addWidget(QLabel("Min"))
@@ -375,6 +380,7 @@ class MultiTraceView(QMainWindow):
         toolbar2.addWidget(self.settingsButton)
         toolbar2.addWidget(self.toggleMaxMeanButton)
         toolbar2.addWidget(self.showMessages)
+        toolbar2.addWidget(self.showLegend)
 
         self.addToolBarBreak()
         self.addToolBar(Qt.TopToolBarArea, toolbar2)
@@ -482,6 +488,7 @@ class MultiTraceView(QMainWindow):
             out[:, 1].astype(int), out[:, 0].astype(int)
         )
         self.state.updateUnit(evt, merge=True)
+        self.pg_selector.clear()
 
     def toggle_polySelector(self, mode=None):
         self.pg_selector.set_active(mode or (not self.pg_selector.active))
@@ -503,11 +510,10 @@ class MultiTraceView(QMainWindow):
             self.pg_selector.set_visible(False)
 
     def keyPressEvent(self, e):
-
-        if e.key() == Qt.Key_P:
+        if e.key() in (Qt.Key_P, Qt.Key_Escape):
             self.toggle_polySelector()
         if (
-            e.key() == Qt.Key_Return and self.pg_selector.active
+            e.key() in (Qt.Key_Return, Qt.Key_Enter) and self.pg_selector.active
         ):  # action when pg_selector is done. #TODO: move elsewhere
 
             self.polySelect()
@@ -796,6 +802,12 @@ class MultiTraceView(QMainWindow):
             for x in self.points_spikegroups:
                 if x is not None:
                     x.remove()
+
+            # optional legend
+            if self.legend is not None:
+                for txt in self.legend:
+                    txt.remove()
+                self.legend = None
             # except:
             #    pass
         points_spikegroups = []
@@ -832,11 +844,35 @@ class MultiTraceView(QMainWindow):
         points_spikegroups = []
         colors = get_cmap("Set2").colors
         if self.includeAllUnitsCheckBox.isChecked():
+            legend = []
             for i, x in enumerate(self.state.spike_groups):
+                if x.event.name == None:
+                    ss = str(i)
+                else:
+                    ss = x.event.name
+                points = np.array(
+                    [(a[0], i) for i, a in enumerate(x.idx_arr) if a is not None]
+                )
+
                 if i == self.state.cur_spike_group:
+                    if self.showLegend.isChecked():
+                        tt = self.ax.text(points[0][0], points[0][1], ss)
+                        tt.set_color("red")
+                        tt.set_backgroundcolor("white")
+                        tt.set_fontweight("bold")
+                        legend.append(tt)
                     continue
+
+                if self.showLegend.isChecked():
+                    tt = self.ax.text(points[0][0], points[0][1], ss)
+                    tt.set_color(colors[i % len(colors)])
+                    tt.set_backgroundcolor("white")
+                    tt.set_fontweight("bold")
+                    legend.append(tt)
+
                 artists = plot(i, color=colors[i % len(colors)])
                 points_spikegroups.append(artists)
+            self.legend = legend
 
         # bg = self.
         if self.includeUnitCheckbox.isChecked():
@@ -930,7 +966,6 @@ class MultiTraceView(QMainWindow):
         self.view.draw()
 
     def toggle_plot_messages(self, events):
-        print("toggle_plot_messages")
         if self.messages is not None:
             for txt in self.messages:
                 txt.remove()
