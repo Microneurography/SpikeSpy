@@ -808,7 +808,6 @@ class MultiTraceView(QMainWindow):
             if self.legend is not None:
                 for txt in self.legend:
                     txt.remove()
-                    print("during")
                     print(self.legend)
 
                 self.legend = None
