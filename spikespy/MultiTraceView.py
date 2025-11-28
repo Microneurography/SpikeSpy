@@ -510,7 +510,6 @@ class MultiTraceView(QMainWindow):
             self.pg_selector.set_visible(False)
 
     def keyPressEvent(self, e):
-        print(e.key())
         if e.key() in (Qt.Key_P, Qt.Key_Escape):
             self.toggle_polySelector()
         if (
@@ -808,8 +807,6 @@ class MultiTraceView(QMainWindow):
             if self.legend is not None:
                 for txt in self.legend:
                     txt.remove()
-                    print(self.legend)
-
                 self.legend = None
             # except:
             #    pass
@@ -876,7 +873,6 @@ class MultiTraceView(QMainWindow):
                 artists = plot(i, color=colors[i % len(colors)])
                 points_spikegroups.append(artists)
             self.legend = legend
-            print(self.legend)
 
         # bg = self.
         if self.includeUnitCheckbox.isChecked():

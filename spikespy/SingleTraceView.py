@@ -502,7 +502,6 @@ class SingleTraceView(QMainWindow):
                 return
 
             x += np.argmax(np.abs(dpts[x - w : x + w])) - w
-        print(x)
         self.state.setUnit(x)
 
     def keyPressEvent(self, e):
