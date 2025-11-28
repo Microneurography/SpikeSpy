@@ -869,6 +869,8 @@ class MultiTraceView(QMainWindow):
                 if self.showLegend.isChecked():
                     tt = self.ax.text(points[0][0], points[0][1], ss)
                     tt.set_color(colors[i % len(colors)])
+                    tt.set_backgroundcolor("white")
+                    tt.set_fontweight("bold")
                     legend.append(tt)
 
                 artists = plot(i, color=colors[i % len(colors)])

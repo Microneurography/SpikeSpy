@@ -251,7 +251,7 @@ def as_neo(
         try:
             for x in np.unique(spike_events.array_annotations["spikeGroup"]):
                 e = spike_events[spike_events.array_annotations["spikeGroup"] == x]
-                e.name = f"unit {x}"
+                e.name = f"unit_{x}"
                 units.append(e)
         except:
             pass
