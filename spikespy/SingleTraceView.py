@@ -502,15 +502,12 @@ class SingleTraceView(QMainWindow):
                 return
 
             x += np.argmax(np.abs(dpts[x - w : x + w])) - w
-        # print("set_cur_pos")
-        # print(x)
         self.state.setUnit(x)
 
     def keyPressEvent(self, e):
         if (
             e.key() == Qt.Key_N or e.key() == Qt.Key_Space
         ):  # add a new spike where we last had one
-            # print("N KEY or SPACE KEY")
             cur_event_time = self.state.event_signal.times[self.state.stimno]
             sg = self.state.getUnitGroup()
             cur_lat = sg.get_latencies(
@@ -529,6 +526,8 @@ class SingleTraceView(QMainWindow):
                 prv_lat = sg.get_latencies(
                     np.array([prev_event_time]) * prev_event_time.units
                 )[0].rescale("s")
+                if prv_lat == np.nan:
+                    continue
                 cur_point = int(prv_lat * self.state.sampling_rate)
 
                 if cur_point != np.nan and prv_lat < self.state.window_size:
@@ -537,7 +536,6 @@ class SingleTraceView(QMainWindow):
                     break
 
         elif e.key() == Qt.Key_Z:  # Although the zoom works, it can't be undone...
-            # print("Z KEY")
             # get current spike location
             spike_ts = (
                 self.state.getUnitGroup()
@@ -572,7 +570,6 @@ class SingleTraceView(QMainWindow):
             and (e.modifiers() & Qt.ShiftModifier)
             and self.conv is not None
         ):
-            # print("SHIFT + LEFT/RIGHT KEY")
             cur_stimpos = self.state.getUnitGroup().idx_arr[self.state.stimno][0]
             conv_high = np.percentile(self.conv[self.state.stimno][1000:-1000], 99)
             idx, _ = find_peaks(self.conv[self.state.stimno], conv_high)
@@ -592,7 +589,6 @@ class SingleTraceView(QMainWindow):
 
             self.state.setUnit(idx[closest_idx])
         elif e.key() == Qt.Key_BracketLeft:  # Zoom out
-            # print("[ KEY")
             # get current xlim & ylim
             x_limits = [self.ax.get_xlim()[0], self.ax.get_xlim()[1]]
             y_limits = [self.ax.get_ylim()[0], self.ax.get_ylim()[1]]
@@ -616,7 +612,6 @@ class SingleTraceView(QMainWindow):
 
             self.fig.canvas.draw_idle()
         elif e.key() == Qt.Key_BracketRight:  # Zoom in
-            # print("] KEY")
             # get current xlim & ylim
             x_limits = [self.ax.get_xlim()[0], self.ax.get_xlim()[1]]
             y_limits = [self.ax.get_ylim()[0], self.ax.get_ylim()[1]]

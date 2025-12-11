@@ -14,6 +14,7 @@ def track_basic(
     threshold=0.1 * pq.mV,
     window=0.01 * pq.s,
     max_skip=1,
+    track_limit=0,
 ):
     """
     basic tracking as per APTrack plugin
@@ -28,18 +29,25 @@ def track_basic(
     traced_times = []
     skipped = 0
 
-    for x in stimulus_events[start_idx:]:
+    flip = False
+    if threshold < 0:
+        flip = True
+        threshold = -threshold
+
+    for idx,x in enumerate(stimulus_events[start_idx:]):
+        if ((track_limit>0) & (track_limit<idx)):
+            logger.info("Stopping tracking as hit the track_limit")
+            break
+
         timeslice = raw_data.time_slice(
             x + offset - (window / 2), x + offset + (window / 2)
         )
-        if threshold < 0:
-            timeslice = timeslice * -1
+        if flip:
+            timeslice = timeslice * -1    
         max_idx = np.argmax(timeslice)
         max_val = timeslice[max_idx]
-
-        if (max_val >= threshold and threshold >= 0) or (
-            max_val <= threshold and threshold < 0
-        ):
+        
+        if (max_val >= threshold and threshold >= 0):
             skipped = 0
             max_ts = timeslice.times[
                 max_idx
