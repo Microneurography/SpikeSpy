@@ -322,9 +322,22 @@ class MdiView(QMainWindow):
         )
         self.shortcut_del.activated.connect(lambda: self.state.setUnit(None))
 
+        self.shortcut_copylast = QShortcut(
+            QKeySequence(Qt.Key_Space), self, context=Qt.ApplicationShortcut
+        )
+        self.shortcut_copylast.activated.connect(lambda: self.state.setUnit(-1))
+
+        self.shortcut_copynext = QShortcut(
+            QKeySequence(Qt.Modifier.SHIFT | Qt.Key.Key_Space),
+            self,
+            context=Qt.ApplicationShortcut,
+        )
+        self.shortcut_copynext.activated.connect(lambda: self.state.setUnit(-2))
+
         self.move_mode = "snap"
 
         def move(dist=1, mode=None):
+            print(f"move {dist}")
             cur_point = (
                 self.state.spike_groups[self.state.cur_spike_group].idx_arr[
                     self.state.stimno
