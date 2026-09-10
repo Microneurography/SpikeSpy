@@ -34,8 +34,8 @@ def track_basic(
         flip = True
         threshold = -threshold
 
-    for idx,x in enumerate(stimulus_events[start_idx:]):
-        if ((track_limit>0) & (track_limit<idx)):
+    for idx, x in enumerate(stimulus_events[start_idx:]):
+        if (track_limit > 0) & (track_limit < idx):
             logger.info("Stopping tracking as hit the track_limit")
             break
 
@@ -43,11 +43,13 @@ def track_basic(
             x + offset - (window / 2), x + offset + (window / 2)
         )
         if flip:
-            timeslice = timeslice * -1    
+            timeslice = timeslice * -1
         max_idx = np.argmax(timeslice)
         max_val = timeslice[max_idx]
-        
-        if (max_val >= threshold and threshold >= 0):
+        print(threshold)
+        print(max_val)
+
+        if max_val >= threshold and threshold >= 0:
             skipped = 0
             max_ts = timeslice.times[
                 max_idx

@@ -505,37 +505,7 @@ class SingleTraceView(QMainWindow):
         self.state.setUnit(x)
 
     def keyPressEvent(self, e):
-        if (
-            e.key() == Qt.Key_N or e.key() == Qt.Key_Space
-        ):  # add a new spike where we last had one
-            cur_event_time = self.state.event_signal.times[self.state.stimno]
-            sg = self.state.getUnitGroup()
-            cur_lat = sg.get_latencies(
-                np.array([cur_event_time]) * cur_event_time.units
-            )[0].rescale("s")
-            if cur_lat != np.nan and cur_lat < self.state.window_size:
-                # cursor already on the screen, why do you want to copy the last one?
-                return
-
-            for i in range(5):
-                prev_event_time = self.state.event_signal.times[
-                    self.state.stimno - i - 1
-                ]
-
-                sg = self.state.getUnitGroup()
-                prv_lat = sg.get_latencies(
-                    np.array([prev_event_time]) * prev_event_time.units
-                )[0].rescale("s")
-                if prv_lat == np.nan:
-                    continue
-                cur_point = int(prv_lat * self.state.sampling_rate)
-
-                if cur_point != np.nan and prv_lat < self.state.window_size:
-                    self.set_cur_pos(cur_point)
-                    self.fig.canvas.draw_idle()
-                    break
-
-        elif e.key() == Qt.Key_Z:  # Although the zoom works, it can't be undone...
+        if e.key() == Qt.Key_Z:  # Although the zoom works, it can't be undone...
             # get current spike location
             spike_ts = (
                 self.state.getUnitGroup()

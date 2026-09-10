@@ -340,6 +340,8 @@ class MultiTraceView(QMainWindow):
 
         self.polySelectButton = QPushButton("Selector")
         self.polySelectButton.clicked.connect(lambda *args: self.toggle_polySelector())
+        self.deleterButton = QPushButton("Deleter")
+        self.deleterButton.clicked.connect(lambda *args: self.toggle_deleter())
 
         self.settingsButton = QPushButton("Settings")
         self.settingsDialog = DialogSignalSelect()
@@ -377,6 +379,7 @@ class MultiTraceView(QMainWindow):
         toolbar2.addSeparator()
 
         toolbar2.addWidget(self.polySelectButton)
+        toolbar2.addWidget(self.deleterButton)
         toolbar2.addWidget(self.settingsButton)
         toolbar2.addWidget(self.toggleMaxMeanButton)
         toolbar2.addWidget(self.showMessages)
@@ -403,7 +406,7 @@ class MultiTraceView(QMainWindow):
         )  # useblit does not work (for unknown reasons)
         self.pg_selector.set_active(False)
         self.update_axis()
-
+        self.deleter = False
         # @qsignal_throttle_wrapper(interval=33)
         # def draw_evt(evt):
         #     with self.fig.canvas.callbacks.blocked():
@@ -423,6 +426,12 @@ class MultiTraceView(QMainWindow):
             lambda x, y: self.pg_selector.set_w(
                 int(self.state.analog_signal.sampling_rate * x / 1000)
             )
+        )
+
+        self.dialogDeleteRegion = DialogDeleteRegion(self)
+        self.dialogDeleteRegion.onSubmit.connect(self.deleteRegion)
+        self.dialogDeleteRegion.finished.connect(
+            lambda *args: self.toggle_deleter(False)
         )
 
     def get_settings(self):
@@ -475,6 +484,8 @@ class MultiTraceView(QMainWindow):
             stimpos = np.arange(seg[0, 1], seg[1, 1])
             arr = np.interp(stimpos, seg[:, 1], seg[:, 0])
             for x, stimno in zip(arr, stimpos):
+                if stimno >= erp.shape[0]:  # if you go off the image
+                    continue
                 x2 = int(x - (window_size // 2))
                 vals = erp[stimno, x2 : x2 + window_size]
                 x2_offset = np.argmax((1 if min_peak >= 0 else -1) * (vals))
@@ -482,12 +493,13 @@ class MultiTraceView(QMainWindow):
                     min_peak
                 ):  # if min_peak is negative, must be negative
                     out.append((x2 + x2_offset, stimno, vals[x2_offset]))
-
-        out = np.array(out)
-        evt = self.state.stimno_offset_to_event(
-            out[:, 1].astype(int), out[:, 0].astype(int)
-        )
-        self.state.updateUnit(evt, merge=True)
+        # in case our threshold is very high and it returns nothing
+        if len(out) > 0:
+            out = np.array(out)
+            evt = self.state.stimno_offset_to_event(
+                out[:, 1].astype(int), out[:, 0].astype(int)
+            )
+            self.state.updateUnit(evt, merge=True)
         self.pg_selector.clear()
 
     def toggle_polySelector(self, mode=None):
@@ -509,9 +521,33 @@ class MultiTraceView(QMainWindow):
             self.dialogPolySelect.hide()
             self.pg_selector.set_visible(False)
 
+    def deleteRegion(self):
+        """
+        Delete events
+        """
+        start_event, end_event = self.dialogDeleteRegion.getValues()
+
+        erp = self.state.get_erp()
+
+        for stimpos in range(start_event, end_event + 1):
+            if stimpos >= erp.shape[0]:  # if you go off the image
+                continue
+            self.state.setUnit(None, stimpos)
+
+    def toggle_deleter(self, mode=None):
+        self.deleter = mode or (not self.deleter)
+        if self.deleter == 1:
+            self.dialogDeleteRegion.show()
+            self.dialogDeleteRegion.change()
+
+        else:
+            self.dialogDeleteRegion.hide()
+
     def keyPressEvent(self, e):
-        if e.key() in (Qt.Key_P, Qt.Key_Escape):
+        if e.key() == (Qt.Key_P):
             self.toggle_polySelector()
+        if e.key() == (Qt.Key_Escape):
+            self.pg_selector.clear()
         if (
             e.key() in (Qt.Key_Return, Qt.Key_Enter) and self.pg_selector.active
         ):  # action when pg_selector is done. #TODO: move elsewhere
@@ -1154,6 +1190,49 @@ class DialogPolySelect(QDialog):
 
     def getValues(self):
         return (self.window_size_input.value(), self.minimumThreshold.value())
+
+
+class DialogDeleteRegion(QDialog):
+    changeSelection = Signal(float, float)
+    onSubmit = Signal(float, float)
+
+    def __init__(self, parent=None, options={}):
+        super().__init__(parent, QtCore.Qt.Tool)
+        self.initUI(options)
+
+    def initUI(self, options):
+        self.vbox = QFormLayout()
+        self.cboxes = []
+
+        self.start_event_input = QSpinBox(self)
+        self.start_event_input.setMinimum(0)
+        self.start_event_input.setMaximum(999999)
+        self.start_event_input.setValue(0)
+        self.start_event_input.setBaseSize(100, 10)
+        self.start_event_input.valueChanged.connect(lambda *args: self.change())
+        self.vbox.addRow(self.tr("start event"), self.start_event_input)
+
+        self.end_event_input = QSpinBox(self)
+        self.end_event_input.setMinimum(0)
+        self.end_event_input.setMaximum(999999)
+        self.end_event_input.setValue(0)
+        self.end_event_input.setBaseSize(100, 10)
+        self.end_event_input.valueChanged.connect(lambda *args: self.change())
+        self.vbox.addRow(self.tr("end event"), self.end_event_input)
+
+        self.goButton = QPushButton("delete")
+        self.goButton.clicked.connect(lambda: self.onSubmit.emit(*self.getValues()))
+        self.vbox.addRow(self.goButton)
+
+        self.setLayout(self.vbox)
+
+    def change(self):
+        self.changeSelection.emit(
+            self.start_event_input.value(), self.end_event_input.value()
+        )
+
+    def getValues(self):
+        return (self.start_event_input.value(), self.end_event_input.value())
 
 
 if __name__ == "__main__":

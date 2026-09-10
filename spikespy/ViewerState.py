@@ -267,6 +267,36 @@ class ViewerState(QObject):
             self.spike_groups[self.cur_spike_group].idx_arr[stimno] = None
 
         else:
+            if (
+                latency == -1
+            ):  # if latency is -1, we want to find the previous spike and use that as the latency
+                prv_lat = np.nan
+                for attempts in range(3):
+                    prev_event_time = self.event_signal.times[
+                        self.stimno - 1 - attempts
+                    ]
+                    sg = self.getUnitGroup()
+                    prv_lat = sg.get_latencies(
+                        np.array([prev_event_time]) * prev_event_time.units
+                    )[0].rescale("s")
+                    if prv_lat != np.nan:
+                        latency = int(
+                            (prv_lat * self.analog_signal.sampling_rate).magnitude
+                        )
+                        break
+            elif (
+                latency == -2
+            ):  # if latency is -2, we want to find the next spike and use that as the latency
+                next_event_time = self.event_signal.times[self.stimno + 1]
+                sg = self.getUnitGroup()
+                next_lat = sg.get_latencies(
+                    np.array([next_event_time]) * next_event_time.units
+                )[0].rescale("s")
+                if next_lat != np.nan:
+                    latency = int(
+                        (next_lat * self.analog_signal.sampling_rate).magnitude
+                    )
+
             self.spike_groups[self.cur_spike_group].idx_arr[stimno] = (
                 latency,
                 1,
@@ -465,6 +495,7 @@ class ViewerState(QObject):
     _peaks = None
 
     def get_peaks(self):
+        t = time.time()
         if self._peaks is not None:
             return self._peaks
         from scipy.signal import find_peaks
@@ -477,6 +508,8 @@ class ViewerState(QObject):
             pts = np.sort(np.hstack([pts, pts_down]).flatten())
             all_pts.append(pts)
         self._peaks = all_pts
+        elapsed = time.time() - t
+        print(f"Finding peaks took {elapsed:.2f} seconds")
         return all_pts
 
     def set_window_size(self, window_size):
